@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Sora } from "next/font/google";
 import "./globals.css";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 const sora = Sora({
   subsets: ["latin"],
@@ -10,7 +12,7 @@ const sora = Sora({
 
 export const metadata: Metadata = {
   title: "Tower Finance - Cryptocurrency Trading Platform",
-  description: "Trade cryptocurrencies with ease on BroomFi",
+  description: "Trade cryptocurrencies with ease on Tower Finance",
 };
 
 export default function RootLayout({
@@ -21,7 +23,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${sora.variable} font-sans antialiased`}>
-        {children}
+        <div className="min-h-screen flex flex-col bg-background">
+          <Header />
+          {children}
+          <Footer />
+        </div>
       </body>
     </html>
   );
