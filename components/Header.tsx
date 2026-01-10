@@ -121,7 +121,7 @@ const Header = () => {
                 />
               </span>
             </div>
-            <span className="text-sm font-medium">Arc</span>
+            <span className="text-sm font-medium text-white">Arc</span>
           </motion.button>
 
           {/* Connect Wallet Button */}
@@ -205,9 +205,17 @@ const Header = () => {
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors text-sm font-medium"
                 >
                   <div className="w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center">
-                    <span className="text-xs text-primary font-bold">A</span>
+                    <span className="text-xs text-primary font-bold">
+                      <Image
+                        src="/assets/arc_logo_1-removebg-preview.png"
+                        alt="Arc"
+                        width={40}
+                        height={40}
+                        className="object-contain"
+                      />
+                    </span>
                   </div>
-                  <span>Arc</span>
+                  <span className="text-white">Arc</span>
                 </button>
                 <button
                   onClick={() => router.push("/settings")}

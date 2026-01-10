@@ -11,7 +11,7 @@ const Profile = () => {
   const [holdingsExpanded, setHoldingsExpanded] = useState(false);
 
   return (
-    <div className="text-white">
+    <div className="text-white min-h-screen">
       {/* Token Ticker */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
