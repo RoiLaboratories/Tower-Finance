@@ -7,15 +7,15 @@ const Footer = () => {
   const socialLinks = [
     {
       icon: <FaXTwitter className="w-5 h-5" />,
-      href: "#",
+      href: "https://x.com/",
     },
     {
       icon: <FaTelegram className="w-5 h-5" />,
-      href: "#",
+      href: "https://web.telegram.org/",
     },
     {
       icon: <FaDiscord className="w-5 h-5" />,
-      href: "#",
+      href: "https://discord.com/",
     },
   ];
 
