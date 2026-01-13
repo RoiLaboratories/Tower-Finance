@@ -1,6 +1,4 @@
-// config/tokens.ts
 import { StaticImageData } from "next/image";
-import arcLogo from "@/public/assets/arc_logo_1-removebg-preview.png";
 import usdcLogo from "@/public/assets/USDC-fotor-bg-remover-2025111075935.png";
 import usdtLogo from "@/public/assets/usdt_logo-removebg-preview.png";
 import ethLogo from "@/public/assets/Eth_logo_3-removebg-preview.png";
@@ -44,13 +42,7 @@ export const tokens: Token[] = [
     icon: hypeLogo,
     color: "text-success",
   },
-  {
-    symbol: "ARC",
-    price: "$1.00",
-    change: "+16.0%",
-    icon: arcLogo,
-    color: "text-success",
-  },
+
   {
     symbol: "UNI",
     price: "$1.00",

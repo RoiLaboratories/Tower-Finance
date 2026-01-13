@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Sora } from "next/font/google";
+import { Sora, Cinzel } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -7,6 +7,11 @@ import Footer from "@/components/Footer";
 const sora = Sora({
   subsets: ["latin"],
   variable: "--font-sora",
+  display: "swap",
+});
+const cinzel = Cinzel({
+  subsets: ["latin"],
+  variable: "--font-cinzel",
   display: "swap",
 });
 
@@ -22,7 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${sora.variable} font-sans antialiased`}>
+      <body className={`${sora.variable} ${cinzel.variable}  antialiased`}>
         <div className="min-h-screen flex flex-col">
           <Header />
           {children}

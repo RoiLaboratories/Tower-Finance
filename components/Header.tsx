@@ -55,7 +55,10 @@ const Header = () => {
                 className="object-contain"
               />
             </div>
-            <span className="text-lg sm:text-xl font-bold text-foreground">
+            <span
+              className="text-lg sm:text-xl font-bold text-foreground"
+              style={{ fontFamily: "var(--font-cinzel)" }}
+            >
               TOWER
             </span>
           </motion.div>
