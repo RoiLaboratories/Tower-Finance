@@ -19,7 +19,7 @@ export const RecurringBuys = () => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
-      className="bg-zinc-900 rounded-xl sm:rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-6"
+      className="bg-zinc-900/50 backdrop-blur-sm rounded-2xl p-6 space-y-5 border border-zinc-800/30"
     >
       <AmountInput amount={amount} readOnly />
 
@@ -42,9 +42,9 @@ export const RecurringBuys = () => {
       </div>
 
       <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        className="w-full py-3 rounded-xl bg-white text-black font-semibold hover:bg-gray-100 transition-colors text-sm sm:text-base"
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.99 }}
+        className="w-full py-3 rounded-xl bg-white text-black font-semibold hover:bg-gray-100 transition-colors text-sm mt-2"
       >
         Continue
       </motion.button>

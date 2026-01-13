@@ -64,6 +64,9 @@ body {
   --color-chart-3: hsl(280 80% 60%);
   --color-chart-4: hsl(35 90% 55%);
   --color-chart-5: hsl(340 80% 55%);
+
+  --font-family-sans: var(--font-sora);
+  --font-family-cinzel: var(--font-cinzel);
 }
 
 @layer base {

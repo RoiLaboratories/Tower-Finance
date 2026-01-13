@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { ArrowUp } from "lucide-react";
 
 const quickPrompts = [
   "What are my buy/sell position",
@@ -60,64 +61,29 @@ export const AIChat = () => {
   };
 
   const handlePromptClick = (prompt: string) => {
-    if (activePrompt === prompt) {
-      // If clicking the same prompt, reset everything
-      setActivePrompt(null);
-      setMessages([]);
-      setIsLoading(false);
-    } else {
-      // New prompt clicked
-      setActivePrompt(prompt);
-      setMessages([]);
-      handleSendMessage(prompt);
-    }
+    setActivePrompt(prompt);
+    setMessages([]);
+    handleSendMessage(prompt);
+  };
+
+  const handleReset = () => {
+    setActivePrompt(null);
+    setMessages([]);
+    setIsLoading(false);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage(message);
+      setActivePrompt(null);
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col p-4 sm:p-6 lg:p-8 overflow-hidden">
-      {/* Top section - Logo or Active Prompt */}
-      <div className="shrink-0 mb-6">
-        {!activePrompt ? (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 200 }}
-            className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full flex items-center justify-center"
-          >
-            <Image
-              src="/assets/logo.png"
-              alt="Tower logo"
-              width={80}
-              height={80}
-              className="object-contain"
-            />
-          </motion.div>
-        ) : (
-          // Active prompt button
-          <motion.button
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            whileHover={{ scale: 1.02, x: 5 }}
-            whileTap={{ scale: 0.98 }}
-            className="w-full text-left px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors"
-            onClick={() => handlePromptClick(activePrompt)}
-          >
-            <span className="text-sm sm:text-base text-gray-300">
-              {activePrompt}
-            </span>
-          </motion.button>
-        )}
-      </div>
-
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto mb-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
+    <div className="flex-1 flex flex-col p-4 sm:p-6 lg:p-12 w-full">
+      {/* Messages Area - Takes up remaining space */}
+      <div className="flex-1 overflow-y-auto space-y-4 flex flex-col justify-end">
         {messages.length > 0 && (
           <div className="space-y-4">
             {messages.map((msg) => (
@@ -128,12 +94,12 @@ export const AIChat = () => {
                 }`}
               >
                 {!msg.isUser && (
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-white">
                     <Image
                       src="/assets/logo.png"
                       alt="Tower logo"
-                      width={40}
-                      height={40}
+                      width={32}
+                      height={32}
                       className="object-contain"
                     />
                   </div>
@@ -142,16 +108,16 @@ export const AIChat = () => {
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
+                  onClick={msg.isUser ? handleReset : undefined}
                   className={`max-w-[80%] ${
                     msg.isUser
-                      ? "bg-blue-600 text-white rounded-3xl px-4 py-2 sm:px-6 sm:py-3"
+                      ? "bg-blue-600 text-white rounded-2xl px-5 py-3 cursor-pointer hover:bg-blue-700 transition-colors"
                       : msg.text === "Trading Volume"
-                      ? "bg-zinc-900 text-white rounded-2xl p-4"
-                      : "bg-zinc-900 text-white rounded-2xl px-4 py-3 sm:px-6 sm:py-4"
+                      ? "bg-zinc-900/50 text-white rounded-xl p-4 backdrop-blur-sm"
+                      : "bg-zinc-900/50 text-white rounded-xl px-5 py-3 backdrop-blur-sm"
                   }`}
                 >
                   {msg.text === "Trading Volume" ? (
-                    // Trading Volume Chart
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <span className="font-semibold">Trading Volume</span>
@@ -159,7 +125,7 @@ export const AIChat = () => {
                           {["24H", "7D", "30D", "ALL"].map((tf, idx) => (
                             <button
                               key={tf}
-                              className={`px-2 sm:px-3 py-1 rounded-lg text-xs sm:text-sm ${
+                              className={`px-3 py-1 rounded-lg text-xs ${
                                 idx === 1
                                   ? "bg-blue-600 text-white"
                                   : "text-gray-400"
@@ -170,13 +136,11 @@ export const AIChat = () => {
                           ))}
                         </div>
                       </div>
-                      <div className="text-xl sm:text-2xl font-bold mb-1">
-                        $44,238 USD
-                      </div>
-                      <div className="text-xs sm:text-sm text-gray-400 mb-4">
+                      <div className="text-2xl font-bold mb-1">$44,238 USD</div>
+                      <div className="text-sm text-gray-400 mb-4">
                         Jan, 2026 8:00 AM
                       </div>
-                      <div className="h-24 sm:h-32 relative">
+                      <div className="h-32 relative">
                         <svg className="w-full h-full" viewBox="0 0 400 100">
                           <polyline
                             points="0,60 50,40 100,70 150,50 200,20 250,40 300,70 350,50 400,30"
@@ -188,12 +152,12 @@ export const AIChat = () => {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm sm:text-base">{msg.text}</p>
+                    <p className="text-sm">{msg.text}</p>
                   )}
                 </motion.div>
 
                 {msg.isUser && (
-                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
                     <span className="text-white text-sm">U</span>
                   </div>
                 )}
@@ -202,16 +166,16 @@ export const AIChat = () => {
 
             {isLoading && (
               <div className="flex gap-3 justify-start">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-white">
                   <Image
                     src="/assets/logo.png"
                     alt="Tower logo"
-                    width={40}
-                    height={40}
+                    width={32}
+                    height={32}
                     className="object-contain"
                   />
                 </div>
-                <div className="bg-zinc-900 text-white rounded-2xl px-6 py-4">
+                <div className="bg-zinc-900/50 backdrop-blur-sm text-white rounded-xl px-5 py-3">
                   <div className="flex gap-1">
                     <motion.div
                       animate={{ opacity: [0.4, 1, 0.4] }}
@@ -236,30 +200,48 @@ export const AIChat = () => {
         )}
       </div>
 
-      {/* Quick Prompts above input - only show when no active prompt */}
-      {!activePrompt && (
-        <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4 shrink-0">
-          {quickPrompts.map((prompt, index) => (
-            <motion.button
-              key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1, duration: 0.3 }}
-              whileHover={{ scale: 1.02, x: 5 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full text-left px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors"
-              onClick={() => handlePromptClick(prompt)}
+      {/* Bottom Container: Logo, Prompts, and Input */}
+      <div className="shrink-0 max-w-2xl mt-6">
+        {/* Logo and Prompts - Only show when no messages */}
+        {messages.length === 0 && (
+          <div className="mb-6">
+            {/* Logo */}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200 }}
+              className="w-12 h-12 rounded-full flex items-center justify-center bg-white mb-8"
             >
-              <span className="text-sm sm:text-base text-gray-300">
-                {prompt}
-              </span>
-            </motion.button>
-          ))}
-        </div>
-      )}
+              <Image
+                src="/assets/logo.png"
+                alt="Tower logo"
+                width={48}
+                height={48}
+                className="object-contain"
+              />
+            </motion.div>
 
-      {/* Input at bottom */}
-      <div className="shrink-0">
+            {/* Quick Prompts */}
+            <div className="space-y-3 max-w-md">
+              {quickPrompts.map((prompt, index) => (
+                <motion.button
+                  key={index}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1, duration: 0.3 }}
+                  whileHover={{ x: 4 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full text-left px-5 py-3.5 rounded-full border border-blue-500/30 hover:border-blue-500/50 transition-all text-gray-300 bg-transparent"
+                  onClick={() => handlePromptClick(prompt)}
+                >
+                  <span className="text-sm">{prompt}</span>
+                </motion.button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Input */}
         <div className="relative">
           <input
             type="text"
@@ -267,27 +249,15 @@ export const AIChat = () => {
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Ask Tower anything..."
-            className="w-full px-4 sm:px-6 py-3 sm:py-4 pr-12 sm:pr-14 rounded-xl sm:rounded-2xl bg-zinc-900 border border-zinc-800 focus:border-zinc-700 outline-none text-white placeholder-gray-500 text-sm sm:text-base"
+            className="w-full px-5 py-3.5 pr-12 rounded-full bg-transparent border border-zinc-700/50 focus:border-zinc-600/50 outline-none text-white placeholder-gray-500 text-sm transition-all"
           />
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
             onClick={() => handleSendMessage(message)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-white flex items-center justify-center"
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white flex items-center justify-center"
           >
-            <svg
-              className="w-4 h-4 sm:w-5 sm:h-5 text-black"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 10l7-7m0 0l7 7m-7-7v18"
-              />
-            </svg>
+            <ArrowUp className="w-4 h-4 text-black" />
           </motion.button>
         </div>
       </div>

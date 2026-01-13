@@ -5,6 +5,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { tokens } from "@/mockData/token";
 import { holdingsData, activitiesData } from "@/mockData/portfolioData";
+import TokenTicker from "@/components/TokenTicker";
 
 const Profile = () => {
   const [activeTab, setActiveTab] = useState("positions");
@@ -13,53 +14,7 @@ const Profile = () => {
   return (
     <div className="text-white min-h-screen">
       {/* Token Ticker */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative overflow-hidden py-3"
-        style={{ borderBottom: "1px solid hsl(220, 15%, 18%)" }}
-      >
-        <div
-          className="flex gap-4 animate-scroll"
-          style={{
-            animation: "scroll 20s linear infinite",
-          }}
-        >
-          {[...tokens, ...tokens, ...tokens].map((token, index) => (
-            <motion.div
-              key={index}
-              whileHover={{ scale: 1.05 }}
-              transition={{ duration: 0.2 }}
-              className="flex items-center gap-3 px-6 py-2 rounded-full whitespace-nowrap shrink-0"
-              style={{
-                backgroundColor: "rgba(255, 255, 255, 0.05)",
-                border: "1px solid hsl(220, 15%, 18%)",
-              }}
-            >
-              <div className="shrink-0 w-5 h-5">
-                <Image
-                  src={token.icon}
-                  alt={`${token.symbol} logo`}
-                  width={20}
-                  height={20}
-                  className="object-contain w-full h-full"
-                />
-              </div>
-              <span className="font-semibold">${token.symbol}</span>
-              <span className="text-gray-300">{token.price}</span>
-              <span className="text-green-400">{token.change}</span>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
-
-      <style>{`
-        @keyframes scroll {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-33.333%); }
-        }
-      `}</style>
+      <TokenTicker />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-12">
