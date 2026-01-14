@@ -27,6 +27,17 @@ const TokenInput = ({ value, onChange, onClear }: TokenInputProps) => {
 
   return (
     <div className="text-right relative flex-1 min-w-0">
+      <style jsx>{`
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type="number"] {
+          -moz-appearance: textfield;
+          appearance: textfield;
+        }
+      `}</style>
       <input
         type="number"
         value={value}
