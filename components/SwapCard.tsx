@@ -20,13 +20,14 @@ import TokenModal from "./TokenModal";
 import SettingsModal from "./SettingsModal";
 import ChartModal from "./ChartModal";
 import TokenInput from "./reusable/TokenInput";
+import SwapNotification from "./SwapNotification";
 
 const tokens = [
-  { symbol: "USDC", icon: usdcLogo, name: "USD Coin" },
-  { symbol: "ETH", icon: ethLogo, name: "Ethereum" },
-  { symbol: "USDT", icon: usdtLogo, name: "Tether" },
-  { symbol: "UNI", icon: uniLogo, name: "Uniswap" },
-  { symbol: "HYPE", icon: hypeLogo, name: "Hyperliquid" },
+  { symbol: "USDC", icon: usdcLogo, name: "USD Coin", balance: 1000 },
+  { symbol: "ETH", icon: ethLogo, name: "Ethereum", balance: 2.5 },
+  { symbol: "USDT", icon: usdtLogo, name: "Tether", balance: 500 },
+  { symbol: "UNI", icon: uniLogo, name: "Uniswap", balance: 50 },
+  { symbol: "HYPE", icon: hypeLogo, name: "Hyperliquid", balance: 100 },
 ];
 
 interface TokenSelectorProps {
@@ -60,14 +61,34 @@ const TokenSelector = ({ selected, onOpenModal }: TokenSelectorProps) => {
 };
 
 const SwapCard = () => {
+  // Wallet and transaction states
+  const [isWalletConnected, setIsWalletConnected] = useState(false);
+  const [swapState, setSwapState] = useState<
+    "idle" | "loading" | "success" | "failed"
+  >("idle");
+  const [notification, setNotification] = useState<"success" | "failed" | null>(
+    null
+  );
+
+  // Token and amount states
   const [sellAmount, setSellAmount] = useState("0.00");
   const [receiveAmount, setReceiveAmount] = useState("0.00");
   const [sellToken, setSellToken] = useState(tokens[0]);
   const [receiveToken, setReceiveToken] = useState(tokens[1]);
+
+  // Modal states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChartOpen, setIsChartOpen] = useState(false);
   const [isSellTokenModalOpen, setIsSellTokenModalOpen] = useState(false);
   const [isReceiveTokenModalOpen, setIsReceiveTokenModalOpen] = useState(false);
+
+  // Check if swap button should be active
+  const isSwapActive =
+    isWalletConnected &&
+    parseFloat(sellAmount) > 0 &&
+    sellAmount !== "0.00" &&
+    parseFloat(receiveAmount) > 0 &&
+    receiveAmount !== "0.00";
 
   const handleSwapTokens = () => {
     const tempToken = sellToken;
@@ -78,8 +99,155 @@ const SwapCard = () => {
     setReceiveAmount(tempAmount);
   };
 
+  // Simulate DEX aggregator calculation
+  const handleSellAmountChange = (value: string) => {
+    setSellAmount(value);
+    if (value && parseFloat(value) > 0) {
+      // Mock exchange rate calculation - replace with actual DEX aggregator API
+      const mockRate =
+        sellToken.symbol === "ETH"
+          ? 1500
+          : sellToken.symbol === "USDC"
+          ? 1
+          : sellToken.symbol === "USDT"
+          ? 1
+          : sellToken.symbol === "UNI"
+          ? 12
+          : 8;
+      const calculated = (parseFloat(value) * mockRate).toFixed(2);
+      setReceiveAmount(calculated);
+    } else {
+      setReceiveAmount("0.00");
+    }
+  };
+
+  // Handle wallet connection
+  const handleConnectWallet = async () => {
+    setSwapState("loading");
+
+    try {
+      // TODO: Replace with actual wallet connection logic
+      // Example with MetaMask:
+      // if (typeof window.ethereum !== 'undefined') {
+      //   const provider = new BrowserProvider(window.ethereum);
+      //   const accounts = await provider.send("eth_requestAccounts", []);
+      //   setIsWalletConnected(true);
+      // }
+
+      // Simulate wallet connection delay
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      setIsWalletConnected(true);
+      setSwapState("idle");
+    } catch (error) {
+      console.error("Wallet connection failed:", error);
+      setSwapState("idle");
+    }
+  };
+
+  // Handle swap transaction
+  const handleSwap = async () => {
+    setSwapState("loading");
+
+    try {
+      // TODO: Replace with actual swap transaction logic
+      // 1. Get quote from DEX aggregator (1inch, 0x, etc.)
+      // 2. Check and approve token allowance if needed
+      // 3. Execute swap transaction
+      // 4. Wait for transaction confirmation
+
+      // Simulate transaction (70% success rate for demo)
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const isSuccess = Math.random() > 0.3;
+
+      if (isSuccess) {
+        setSwapState("success");
+        setNotification("success");
+
+        // Auto-dismiss notification after 5 seconds
+        setTimeout(() => {
+          setNotification(null);
+        }, 5000);
+
+        // Reset amounts after success
+        setTimeout(() => {
+          setSellAmount("0.00");
+          setReceiveAmount("0.00");
+          setSwapState("idle");
+        }, 3000);
+      } else {
+        throw new Error("User rejected transaction");
+      }
+    } catch (error) {
+      console.error("Swap failed:", error);
+      setSwapState("failed");
+      setNotification("failed");
+
+      // Auto-dismiss notification after 5 seconds
+      setTimeout(() => {
+        setNotification(null);
+      }, 5000);
+
+      setTimeout(() => {
+        setSwapState("idle");
+      }, 3000);
+    }
+  };
+
+  // Get button content based on state
+  const getButtonContent = () => {
+    if (!isWalletConnected) {
+      return "Connect Wallet";
+    }
+
+    if (swapState === "loading") {
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
+          <span>Loading</span>
+        </div>
+      );
+    }
+
+    if (!isSwapActive) {
+      return "Swap";
+    }
+
+    return "Swap";
+  };
+
+  // Get button styles based on state
+  const getButtonStyles = () => {
+    const baseStyles =
+      "w-full rounded-xl h-14 text-base font-semibold text-black transition-all";
+
+    if (swapState === "loading") {
+      return `${baseStyles} bg-[#2a2d31] hover:bg-[#2a2d31] cursor-not-allowed text-gray-500`;
+    }
+
+    if (isWalletConnected && !isSwapActive) {
+      return `${baseStyles} bg-[#2a2d31] hover:bg-[#2a2d31] cursor-not-allowed text-gray-500`;
+    }
+
+    return `${baseStyles} bg-primary hover:opacity-90`;
+  };
+
   return (
     <div className="flex gap-6 items-start w-full justify-center">
+      {/* Swap Notification */}
+      <AnimatePresence>
+        {notification && (
+          <SwapNotification
+            type={notification}
+            sellAmount={sellAmount}
+            sellToken={sellToken.symbol}
+            receiveAmount={receiveAmount}
+            receiveToken={receiveToken.symbol}
+            onClose={() => setNotification(null)}
+          />
+        )}
+      </AnimatePresence>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -112,12 +280,15 @@ const SwapCard = () => {
             </div>
           </div>
 
+          {/* Sell Section */}
           <div className="bg-[#151617] rounded-xl p-4 mb-2">
             <div className="flex items-center justify-between mb-2 ">
               <span className="text-sm text-muted-foreground">Sell</span>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Wallet className="w-4 h-4" />
-                <span>0 {sellToken.symbol}</span>
+                <span>
+                  {isWalletConnected ? sellToken.balance : 0} {sellToken.symbol}
+                </span>
                 <button className="text-muted-foreground hover:text-foreground">
                   50%
                 </button>
@@ -135,12 +306,16 @@ const SwapCard = () => {
               />
               <TokenInput
                 value={sellAmount}
-                onChange={setSellAmount}
-                onClear={() => setSellAmount("0.00")}
+                onChange={handleSellAmountChange}
+                onClear={() => {
+                  setSellAmount("0.00");
+                  setReceiveAmount("0.00");
+                }}
               />
             </div>
           </div>
 
+          {/* Swap Arrow Button */}
           <div className="flex justify-center -my-6 relative z-10">
             <motion.button
               onClick={handleSwapTokens}
@@ -153,12 +328,13 @@ const SwapCard = () => {
             </motion.button>
           </div>
 
+          {/* Receive Section */}
           <div className="bg-[#151617] rounded-xl p-4 mt-2 mb-6">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-muted-foreground">Receive</span>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Wallet className="w-4 h-4" />
-                <span>--</span>
+                <span>{isWalletConnected ? receiveToken.balance : "--"}</span>
               </div>
             </div>
             <div className="flex items-center justify-between">
@@ -176,13 +352,21 @@ const SwapCard = () => {
             </div>
           </div>
 
+          {/* Action Button */}
           <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-            <Button className="w-full bg-primary hover:opacity-90 rounded-xl h-14 text-base font-semibold text-black">
-              Connect Wallet
+            <Button
+              onClick={isWalletConnected ? handleSwap : handleConnectWallet}
+              disabled={
+                swapState === "loading" || (isWalletConnected && !isSwapActive)
+              }
+              className={getButtonStyles()}
+            >
+              {getButtonContent()}
             </Button>
           </motion.div>
         </motion.div>
 
+        {/* Token Quick Access Buttons */}
         <div className="flex items-center justify-center gap-4 mt-6">
           <motion.button
             onClick={() => setSellToken(sellToken)}
@@ -226,6 +410,7 @@ const SwapCard = () => {
           </motion.button>
         </div>
 
+        {/* Modals */}
         <TokenModal
           isOpen={isSellTokenModalOpen}
           onClose={() => setIsSellTokenModalOpen(false)}
