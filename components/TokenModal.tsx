@@ -12,11 +12,11 @@ import uniLogo from "@/public/assets/uniswap-removebg-preview.png";
 import hypeLogo from "@/public/assets/hype.png";
 
 const tokens = [
-  { symbol: "USDC", icon: usdcLogo, name: "USD Coin" },
-  { symbol: "ETH", icon: ethLogo, name: "Ethereum" },
-  { symbol: "USDT", icon: usdtLogo, name: "Tether" },
-  { symbol: "UNI", icon: uniLogo, name: "Uniswap" },
-  { symbol: "HYPE", icon: hypeLogo, name: "Hyperliquid" },
+  { symbol: "USDC", icon: usdcLogo, name: "USD Coin", balance: 1000 },
+  { symbol: "ETH", icon: ethLogo, name: "Ethereum", balance: 2.5 },
+  { symbol: "USDT", icon: usdtLogo, name: "Tether", balance: 500 },
+  { symbol: "UNI", icon: uniLogo, name: "Uniswap", balance: 50 },
+  { symbol: "HYPE", icon: hypeLogo, name: "Hyperliquid", balance: 100 },
 ];
 
 interface TokenModalProps {
