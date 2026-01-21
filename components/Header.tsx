@@ -242,13 +242,13 @@ const Header = () => {
                 className="gradient-primary hover:opacity-90 rounded-full px-3 py-2 text-xs text-black font-semibold flex items-center gap-1.5"
                 onClick={() => logout()}
               >
-                <Image
+                {/* <Image
                   src="/assets/phantom.png"
                   alt="Wallet"
                   width={12}
                   height={12}
                   className="opacity-70"
-                />
+                /> */}
                 <span>{getDisplayAddress()}</span>
               </Button>
             ) : (
