@@ -13,10 +13,12 @@ import Image from "next/image";
 import { usePrivy } from "@privy-io/react-auth";
 import { 
   fetchArcBalance, 
+  fetchERC20Balance,
   formatBalance, 
   getSwapQuote, 
   prepareSwapTransaction, 
-  getPoolInfo 
+  getPoolInfo,
+  TOKEN_CONTRACTS
 } from "@/lib/arcNetwork";
 
 import usdcLogo from "@/public/assets/USDC-fotor-bg-remover-2025111075935.png";
@@ -115,7 +117,7 @@ const SwapCard = () => {
 
     setIsLoadingBalances(true);
     try {
-      // Fetch USDC balance from Arc testnet
+      // Fetch USDC balance from Arc testnet (native balance)
       const usdcBalance = await fetchArcBalance(user.wallet.address);
       
       if (usdcBalance) {
@@ -125,17 +127,38 @@ const SwapCard = () => {
         }));
       }
 
-      // TODO: Fetch other token balances
-      // For ETH, USDT, EURC, SWPRC, UNI, HYPE - you'll need to:
-      // 1. Make RPC calls to get ERC20 token balances using eth_call
-      // 2. Call the balanceOf function on each token contract
-      // Token Contract Addresses:
-      // EURC: 0x... (to be configured)
-      // SWPRC: 0x... (to be configured)
-      // UNI: 0x... (to be configured)
-      // HYPE: 0x... (to be configured)
-      // Example:
-      // const eurcBalance = await fetchERC20Balance(user.wallet.address, EURC_CONTRACT_ADDRESS);
+      // Fetch EURC balance
+      if (TOKEN_CONTRACTS.EURC) {
+        const eurcBalanceWei = await fetchERC20Balance(
+          user.wallet.address,
+          TOKEN_CONTRACTS.EURC
+        );
+        if (eurcBalanceWei) {
+          const eurcBalance = parseFloat(eurcBalanceWei) / 10 ** 18;
+          setTokenBalances((prev) => ({
+            ...prev,
+            EURC: eurcBalance,
+          }));
+        }
+      }
+
+      // Fetch SWPRC balance
+      if (TOKEN_CONTRACTS.SWPRC) {
+        const swprcBalanceWei = await fetchERC20Balance(
+          user.wallet.address,
+          TOKEN_CONTRACTS.SWPRC
+        );
+        if (swprcBalanceWei) {
+          const swprcBalance = parseFloat(swprcBalanceWei) / 10 ** 18;
+          setTokenBalances((prev) => ({
+            ...prev,
+            SWPRC: swprcBalance,
+          }));
+        }
+      }
+
+      // TODO: Fetch other token balances (ETH, USDT, UNI, HYPE)
+      // Add token contract addresses to TOKEN_CONTRACTS and use fetchERC20Balance
     } catch (error) {
       console.error("Failed to fetch wallet balances:", error);
     } finally {

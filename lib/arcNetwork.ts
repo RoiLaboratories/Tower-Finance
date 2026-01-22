@@ -8,6 +8,17 @@ export const ARC_TESTNET_CONFIG = {
   faucetUrl: "https://faucet.circle.com",
 };
 
+// Token Contract Addresses on Arc Testnet
+export const TOKEN_CONTRACTS = {
+  EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+  SWPRC: "0xBE7477BF91526FC9988C8f33e91B6db687119D45",
+  // Add other token addresses as needed
+  // USDC: "0x...",
+  // USDT: "0x...",
+  // UNI: "0x...",
+  // HYPE: "0x...",
+};
+
 // Arc Pool Configuration
 export const ARC_POOLS = {
   router: "0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC",
@@ -51,6 +62,64 @@ export const POOL_ABI = [
     outputs: [{ name: "", type: "uint256[]" }],
   },
 ];
+
+// ERC20 ABI for token balance queries
+export const ERC20_ABI = [
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+];
+
+/**
+ * Fetch ERC20 token balance from Arc testnet
+ * @param walletAddress - The wallet address to fetch balance for
+ * @param tokenAddress - The ERC20 token contract address
+ * @returns Balance as string (in wei)
+ */
+export const fetchERC20Balance = async (
+  walletAddress: string,
+  tokenAddress: string
+): Promise<string | null> => {
+  try {
+    // Encode balanceOf function call: balanceOf(address)
+    // Function selector for balanceOf: 0x70a08231
+    const functionSelector = "0x70a08231";
+    const paddedAddress = walletAddress.slice(2).padStart(64, "0");
+    const encodedData = functionSelector + paddedAddress;
+
+    const response = await fetch(ARC_TESTNET_CONFIG.rpcUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_call",
+        params: [
+          {
+            to: tokenAddress,
+            data: encodedData,
+          },
+          "latest",
+        ],
+      }),
+    });
+
+    const data = await response.json();
+    if (data.result) {
+      return data.result;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching ERC20 balance for ${tokenAddress}:`, error);
+    return null;
+  }
+};
 
 /**
  * Fetch wallet balance from Arc testnet
