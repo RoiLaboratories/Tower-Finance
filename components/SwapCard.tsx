@@ -17,7 +17,6 @@ import {
   formatBalance, 
   getSwapQuote, 
   prepareSwapTransaction, 
-  getPoolInfo,
   TOKEN_CONTRACTS,
   TOKEN_DECIMALS
 } from "@/lib/arcNetwork";
@@ -232,16 +231,29 @@ const SwapCard = () => {
     }
   };
 
-  // Get swap quote from Arc pool
+  // Get swap quote from Arc swap router
   const getQuoteForSwap = async (sellAmountValue: string) => {
     try {
-      // Determine pool pair based on selected tokens
-      const poolKey = `${sellToken.symbol}/${receiveToken.symbol}`;
-      const poolInfo = getPoolInfo(poolKey);
-      
-      if (!poolInfo) {
-        console.warn(`Pool not found for pair: ${poolKey}`);
-        // If pool doesn't exist, use a fallback mock rate
+      // For now, we need to map token symbols to indices in the router
+      // The router contract has a token list - indices need to be determined
+      // Assuming: USDC=0, EURC=1, SWPRC=2
+      const tokenIndexMap: Record<string, number> = {
+        USDC: 0,
+        EURC: 1,
+        SWPRC: 2,
+        USDT: 3,
+        UNI: 4,
+        HYPE: 5,
+        ETH: 6,
+      };
+
+      const sellTokenIndex = tokenIndexMap[sellToken.symbol];
+      const receiveTokenIndex = tokenIndexMap[receiveToken.symbol];
+
+      if (sellTokenIndex === undefined || receiveTokenIndex === undefined) {
+        console.warn(
+          `Token index not found for ${sellToken.symbol} or ${receiveToken.symbol}`
+        );
         calculateMockRate(sellAmountValue);
         return;
       }
@@ -252,19 +264,18 @@ const SwapCard = () => {
         parseFloat(sellAmountValue) * 10 ** sellTokenDecimals
       ).toString();
 
-      console.log("Getting quote for:", {
-        poolKey,
-        poolAddress: poolInfo.address,
+      console.log("Getting quote from router:", {
         sellToken: sellToken.symbol,
-        sellTokenDecimals,
+        receiveToken: receiveToken.symbol,
+        sellTokenIndex,
+        receiveTokenIndex,
         amountInWei,
       });
 
-      // Get quote from Arc pool (token indices: 0 for first token in pair, 1 for second)
+      // Get quote from Arc swap router
       const quoteInWei = await getSwapQuote(
-        poolInfo.address,
-        0, // sellToken index
-        1, // receiveToken index
+        sellTokenIndex,
+        receiveTokenIndex,
         amountInWei
       );
 
@@ -273,7 +284,7 @@ const SwapCard = () => {
       // Convert quote back from wei using correct decimals for the receive token
       const receiveTokenDecimals = TOKEN_DECIMALS[receiveToken.symbol] || 18;
       const quoteAmount = parseInt(quoteInWei, 16) / 10 ** receiveTokenDecimals;
-      
+
       console.log("Quote converted:", {
         receiveTokenDecimals,
         quoteAmount,
@@ -350,42 +361,66 @@ const SwapCard = () => {
         throw new Error("Wallet not connected");
       }
 
-      // Step 1: Get pool info for the swap pair
-      const poolKey = `${sellToken.symbol}/${receiveToken.symbol}`;
-      const poolInfo = getPoolInfo(poolKey);
-      
-      if (!poolInfo) {
-        throw new Error(`Pool not found for pair: ${poolKey}`);
+      // Map token symbols to indices in the Arc swap router
+      const tokenIndexMap: Record<string, number> = {
+        USDC: 0,
+        EURC: 1,
+        SWPRC: 2,
+        USDT: 3,
+        UNI: 4,
+        HYPE: 5,
+        ETH: 6,
+      };
+
+      const sellTokenIndex = tokenIndexMap[sellToken.symbol];
+      const receiveTokenIndex = tokenIndexMap[receiveToken.symbol];
+
+      if (sellTokenIndex === undefined || receiveTokenIndex === undefined) {
+        throw new Error(
+          `Token index not found for ${sellToken.symbol} or ${receiveToken.symbol}`
+        );
       }
 
-      // Step 2: Convert amounts to wei (18 decimals)
-      const amountInWei = BigInt(parseFloat(sellAmount) * 10 ** 18).toString();
+      // Step 1: Convert amounts to wei using correct decimals
+      const sellTokenDecimals = TOKEN_DECIMALS[sellToken.symbol] || 18;
+      const receiveTokenDecimals = TOKEN_DECIMALS[receiveToken.symbol] || 18;
+
+      const amountInWei = BigInt(
+        parseFloat(sellAmount) * 10 ** sellTokenDecimals
+      ).toString();
+      
       const minAmountOutWei = BigInt(
-        parseFloat(receiveAmount) * 10 ** 18 * 0.99
+        parseFloat(receiveAmount) * 10 ** receiveTokenDecimals * 0.99
       ).toString(); // 1% slippage tolerance
 
-      // Step 3: Get quote for the swap
+      console.log("Preparing swap:", {
+        sellToken: sellToken.symbol,
+        receiveToken: receiveToken.symbol,
+        sellTokenIndex,
+        receiveTokenIndex,
+        amountInWei,
+        minAmountOutWei,
+      });
+
+      // Step 2: Get quote for verification
       const expectedAmountOut = await getSwapQuote(
-        poolInfo.address,
-        0, // Assuming token0 is the sell token
-        1, // Assuming token1 is the receive token
+        sellTokenIndex,
+        receiveTokenIndex,
         amountInWei
       );
 
-      console.log("Swap quote received:", expectedAmountOut);
+      console.log("Swap quote verified:", expectedAmountOut);
 
-      // Step 4: Prepare swap transaction
+      // Step 3: Prepare swap transaction
       const txData = prepareSwapTransaction(
-        poolInfo.address,
-        0, // tokenInIndex
-        1, // tokenOutIndex
-        amountInWei,
-        minAmountOutWei
+        sellTokenIndex,
+        receiveTokenIndex,
+        amountInWei
       );
 
       console.log("Transaction prepared:", txData);
 
-      // Step 5: Send transaction to user's wallet via Privy
+      // Step 4: Send transaction to user's wallet via Privy
       // Note: This would typically be handled by the wallet provider
       // For now, we simulate the transaction
       await new Promise((resolve) => setTimeout(resolve, 2000));

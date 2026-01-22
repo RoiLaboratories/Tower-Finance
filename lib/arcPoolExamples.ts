@@ -34,13 +34,10 @@ export async function example_getPoolBalances() {
 // ============================================================================
 
 export async function example_getSwapQuote() {
-  const poolAddress = ARC_POOLS.pools["USDC/EURC"];
-
   // Swap 1000 USDC (with 18 decimals) to EURC
   const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(18)).toString();
 
   const amountOut = await getSwapQuote(
-    poolAddress,
     0, // USDC is token 0
     1, // EURC is token 1
     amountIn
@@ -55,17 +52,12 @@ export async function example_getSwapQuote() {
 // ============================================================================
 
 export function example_prepareSwap() {
-  const poolAddress = ARC_POOLS.pools["USDC/EURC"];
   const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(18)).toString();
-  const expectedAmountOut = (BigInt(950) * BigInt(10) ** BigInt(18)).toString(); // 95 EURC (5% slippage)
-  const minAmountOut = (BigInt(expectedAmountOut) * BigInt(95)) / BigInt(100); // 5% slippage protection
 
   const txData = prepareSwapTransaction(
-    poolAddress,
     0, // USDC
     1, // EURC
-    amountIn,
-    minAmountOut.toString()
+    amountIn
   );
 
   console.log("Transaction ready to sign:");
@@ -131,17 +123,13 @@ export async function example_executeSwapWithPrivy(
   sendTransaction: (tx: { to: string; data: string; value: string }) => Promise<string> // Privy's sendTransaction function
 ) {
   try {
-    const poolAddress = ARC_POOLS.pools["USDC/EURC"];
     const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(18)).toString();
-    const minAmountOut = (BigInt(950) * BigInt(10) ** BigInt(18)).toString();
 
     // 1. Prepare transaction
     const txData = prepareSwapTransaction(
-      poolAddress,
-      0,
-      1,
-      amountIn,
-      minAmountOut
+      0, // USDC
+      1, // EURC
+      amountIn
     );
 
     // 2. Send with Privy

@@ -84,7 +84,6 @@ export function useArcPools() {
 
       try {
         const amountOut = await getSwapQuote(
-          poolAddress,
           tokenInIndex,
           tokenOutIndex,
           amountIn
@@ -128,14 +127,11 @@ export function useArcPools() {
       tokenInIndex: number,
       tokenOutIndex: number,
       amountIn: string,
-      minAmountOut: string
     ) => {
       return prepareSwapTransaction(
-        poolAddress,
         tokenInIndex,
         tokenOutIndex,
-        amountIn,
-        minAmountOut
+        amountIn
       );
     },
     []

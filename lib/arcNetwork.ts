@@ -31,8 +31,10 @@ export const TOKEN_DECIMALS: Record<string, number> = {
 };
 
 // Arc Pool Configuration
+// NOTE: The router address is the actual swap contract with get_dy and swap functions
+// Individual pool addresses below are for liquidity management only
 export const ARC_POOLS = {
-  router: "0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC",
+  router: "0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC", // Swap router - use this for quotes and swaps
   pools: {
     "USDC/EURC": "0xd22e4fB80E21e8d2C91131eC2D6b0C000491934B",
     "USDC/SWPRC": "0x613bc8A188a571e7Ffe3F884FabAB0F43ABB8282",
@@ -40,8 +42,8 @@ export const ARC_POOLS = {
   },
 };
 
-// Minimal Pool ABI for swaps and quotes
-export const POOL_ABI = [
+// Swap Router ABI - this contract handles token swaps with get_dy and swap functions
+export const SWAP_ROUTER_ABI = [
   {
     name: "get_dy",
     type: "function",
@@ -61,9 +63,8 @@ export const POOL_ABI = [
       { name: "i", type: "uint256" },
       { name: "j", type: "uint256" },
       { name: "dx", type: "uint256" },
-      { name: "min_dy", type: "uint256" },
     ],
-    outputs: [{ name: "", type: "uint256" }],
+    outputs: [{ name: "dy", type: "uint256" }],
   },
   {
     name: "getBalances",
@@ -71,6 +72,38 @@ export const POOL_ABI = [
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "", type: "uint256[]" }],
+  },
+  {
+    name: "getTokenCount",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+];
+
+// Liquidity Pool ABI for managing liquidity
+export const LIQUIDITY_POOL_ABI = [
+  {
+    name: "getBalances",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256[]" }],
+  },
+  {
+    name: "addLiquidity",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amounts", type: "uint256[]" }],
+    outputs: [],
+  },
+  {
+    name: "removeLiquidity",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "lpAmount", type: "uint256" }],
+    outputs: [],
   },
 ];
 
@@ -304,14 +337,14 @@ async function makeJsonRpcCall(
 
 /**
  * Get a quote for swapping between two tokens
- * @param poolAddress - Address of the pool
- * @param tokenInIndex - Index of input token (0 or 1)
- * @param tokenOutIndex - Index of output token (0 or 1)
+ * Uses the Arc swap router contract
+ * 
+ * @param tokenInIndex - Index of input token in the router's token list
+ * @param tokenOutIndex - Index of output token in the router's token list
  * @param amountIn - Amount to swap (in wei)
  * @returns Amount out (in wei)
  */
 export async function getSwapQuote(
-  poolAddress: string,
   tokenInIndex: number,
   tokenOutIndex: number,
   amountIn: string
@@ -323,8 +356,8 @@ export async function getSwapQuote(
       BigInt(amountIn).toString(),
     ]);
 
-    console.log("Getting swap quote:", {
-      poolAddress,
+    console.log("Getting swap quote from router:", {
+      router: ARC_POOLS.router,
       tokenInIndex,
       tokenOutIndex,
       amountIn,
@@ -333,7 +366,7 @@ export async function getSwapQuote(
 
     const result = await makeJsonRpcCall("eth_call", [
       {
-        to: poolAddress,
+        to: ARC_POOLS.router,
         data,
       },
       "latest",
@@ -346,7 +379,7 @@ export async function getSwapQuote(
     return amount;
   } catch (error) {
     console.error("Error getting swap quote:", {
-      poolAddress,
+      router: ARC_POOLS.router,
       tokenInIndex,
       tokenOutIndex,
       amountIn,
@@ -391,20 +424,16 @@ export async function getPoolBalances(
 }
 
 /**
- * Prepare a swap transaction
- * @param poolAddress - Address of the pool
- * @param tokenInIndex - Index of input token (0 or 1)
- * @param tokenOutIndex - Index of output token (0 or 1)
+ * Prepare a swap transaction using the Arc swap router
+ * @param tokenInIndex - Index of input token in router's token list
+ * @param tokenOutIndex - Index of output token in router's token list
  * @param amountIn - Amount to swap (in wei)
- * @param minAmountOut - Minimum amount to receive (slippage protection, in wei)
  * @returns Transaction data object ready to sign
  */
 export function prepareSwapTransaction(
-  poolAddress: string,
   tokenInIndex: number,
   tokenOutIndex: number,
-  amountIn: string,
-  minAmountOut: string
+  amountIn: string
 ): {
   to: string;
   data: string;
@@ -414,11 +443,10 @@ export function prepareSwapTransaction(
     BigInt(tokenInIndex).toString(),
     BigInt(tokenOutIndex).toString(),
     BigInt(amountIn).toString(),
-    BigInt(minAmountOut).toString(),
   ]);
 
   return {
-    to: poolAddress,
+    to: ARC_POOLS.router,
     data,
     value: "0x0",
   };

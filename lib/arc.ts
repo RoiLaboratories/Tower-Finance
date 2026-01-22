@@ -17,7 +17,7 @@
 export {
   ARC_TESTNET_CONFIG,
   ARC_POOLS,
-  POOL_ABI,
+  SWAP_ROUTER_ABI,
 } from "./arcNetwork";
 
 // Core functions
