@@ -240,24 +240,25 @@ const SwapCard = () => {
       const poolInfo = getPoolInfo(poolKey);
       
       if (!poolInfo) {
+        console.warn(`Pool not found for pair: ${poolKey}`);
         // If pool doesn't exist, use a fallback mock rate
-        const mockRate =
-          sellToken.symbol === "ETH"
-            ? 1500
-            : sellToken.symbol === "USDC"
-            ? 1
-            : sellToken.symbol === "USDT"
-            ? 1
-            : sellToken.symbol === "UNI"
-            ? 12
-            : 8;
-        const calculated = (parseFloat(sellAmountValue) * mockRate).toFixed(2);
-        setReceiveAmount(calculated);
+        calculateMockRate(sellAmountValue);
         return;
       }
 
-      // Convert sell amount to wei (18 decimals)
-      const amountInWei = BigInt(parseFloat(sellAmountValue) * 10 ** 18).toString();
+      // Convert sell amount to wei using correct decimals for the sell token
+      const sellTokenDecimals = TOKEN_DECIMALS[sellToken.symbol] || 18;
+      const amountInWei = BigInt(
+        parseFloat(sellAmountValue) * 10 ** sellTokenDecimals
+      ).toString();
+
+      console.log("Getting quote for:", {
+        poolKey,
+        poolAddress: poolInfo.address,
+        sellToken: sellToken.symbol,
+        sellTokenDecimals,
+        amountInWei,
+      });
 
       // Get quote from Arc pool (token indices: 0 for first token in pair, 1 for second)
       const quoteInWei = await getSwapQuote(
@@ -267,25 +268,43 @@ const SwapCard = () => {
         amountInWei
       );
 
-      // Convert quote back from wei to decimal
-      const quoteAmount = parseFloat(quoteInWei) / 10 ** 18;
+      console.log("Quote received (wei):", quoteInWei);
+
+      // Convert quote back from wei using correct decimals for the receive token
+      const receiveTokenDecimals = TOKEN_DECIMALS[receiveToken.symbol] || 18;
+      const quoteAmount = parseInt(quoteInWei, 16) / 10 ** receiveTokenDecimals;
+      
+      console.log("Quote converted:", {
+        receiveTokenDecimals,
+        quoteAmount,
+      });
+
       setReceiveAmount(quoteAmount.toFixed(2));
     } catch (error) {
       console.error("Error getting swap quote:", error);
       // Fallback to mock calculation on error
-      const mockRate =
-        sellToken.symbol === "ETH"
-          ? 1500
-          : sellToken.symbol === "USDC"
-          ? 1
-          : sellToken.symbol === "USDT"
-          ? 1
-          : sellToken.symbol === "UNI"
-          ? 12
-          : 8;
-      const calculated = (parseFloat(sellAmountValue) * mockRate).toFixed(2);
-      setReceiveAmount(calculated);
+      calculateMockRate(sellAmountValue);
     }
+  };
+
+  // Helper function to calculate using mock rates
+  const calculateMockRate = (sellAmountValue: string) => {
+    const mockRate =
+      sellToken.symbol === "ETH"
+        ? 1500
+        : sellToken.symbol === "USDC"
+        ? 1
+        : sellToken.symbol === "USDT"
+        ? 1
+        : sellToken.symbol === "UNI"
+        ? 12
+        : sellToken.symbol === "EURC"
+        ? 1.05
+        : sellToken.symbol === "SWPRC"
+        ? 0.5
+        : 8;
+    const calculated = (parseFloat(sellAmountValue) * mockRate).toFixed(2);
+    setReceiveAmount(calculated);
   };
 
   // Handle 50% button click

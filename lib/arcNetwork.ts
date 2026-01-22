@@ -323,6 +323,14 @@ export async function getSwapQuote(
       BigInt(amountIn).toString(),
     ]);
 
+    console.log("Getting swap quote:", {
+      poolAddress,
+      tokenInIndex,
+      tokenOutIndex,
+      amountIn,
+      encodedData: data,
+    });
+
     const result = await makeJsonRpcCall("eth_call", [
       {
         to: poolAddress,
@@ -331,11 +339,19 @@ export async function getSwapQuote(
       "latest",
     ]);
 
+    console.log("Swap quote result:", result);
+
     // Parse the result (32 bytes for uint256)
     const amount = BigInt(result).toString();
     return amount;
   } catch (error) {
-    console.error("Error getting swap quote:", error);
+    console.error("Error getting swap quote:", {
+      poolAddress,
+      tokenInIndex,
+      tokenOutIndex,
+      amountIn,
+      error,
+    });
     throw error;
   }
 }
