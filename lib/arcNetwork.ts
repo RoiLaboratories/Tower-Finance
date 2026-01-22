@@ -85,11 +85,25 @@ export const fetchERC20Balance = async (
   tokenAddress: string
 ): Promise<string | null> => {
   try {
+    // Ensure addresses are in correct format (with 0x prefix)
+    const cleanWalletAddress = walletAddress.startsWith("0x")
+      ? walletAddress
+      : `0x${walletAddress}`;
+    const cleanTokenAddress = tokenAddress.startsWith("0x")
+      ? tokenAddress
+      : `0x${tokenAddress}`;
+
     // Encode balanceOf function call: balanceOf(address)
     // Function selector for balanceOf: 0x70a08231
     const functionSelector = "0x70a08231";
-    const paddedAddress = walletAddress.slice(2).padStart(64, "0");
+    const paddedAddress = cleanWalletAddress.slice(2).padStart(64, "0");
     const encodedData = functionSelector + paddedAddress;
+
+    console.log("Fetching ERC20 balance:", {
+      walletAddress: cleanWalletAddress,
+      tokenAddress: cleanTokenAddress,
+      encodedData,
+    });
 
     const response = await fetch(ARC_TESTNET_CONFIG.rpcUrl, {
       method: "POST",
@@ -98,11 +112,11 @@ export const fetchERC20Balance = async (
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id: 1,
+        id: Date.now(),
         method: "eth_call",
         params: [
           {
-            to: tokenAddress,
+            to: cleanTokenAddress,
             data: encodedData,
           },
           "latest",
@@ -111,12 +125,33 @@ export const fetchERC20Balance = async (
     });
 
     const data = await response.json();
-    if (data.result) {
+
+    console.log("ERC20 balance response:", {
+      tokenAddress: cleanTokenAddress,
+      response: data,
+    });
+
+    if (data.error) {
+      console.error(
+        `RPC Error fetching ERC20 balance for ${cleanTokenAddress}:`,
+        data.error
+      );
+      return null;
+    }
+
+    if (data.result && data.result !== "0x") {
       return data.result;
     }
-    return null;
+
+    console.warn(
+      `No balance returned for token ${cleanTokenAddress} at ${cleanWalletAddress}`
+    );
+    return "0x0";
   } catch (error) {
-    console.error(`Error fetching ERC20 balance for ${tokenAddress}:`, error);
+    console.error(
+      `Error fetching ERC20 balance for ${tokenAddress}:`,
+      error
+    );
     return null;
   }
 };

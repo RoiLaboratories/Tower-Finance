@@ -113,12 +113,17 @@ const SwapCard = () => {
 
   // Fetch actual wallet balances from Arc testnet
   const fetchUserBalances = useCallback(async () => {
-    if (!user?.wallet?.address) return;
+    if (!user?.wallet?.address) {
+      console.log("Wallet address not available");
+      return;
+    }
 
+    console.log("Fetching balances for wallet:", user.wallet.address);
     setIsLoadingBalances(true);
     try {
       // Fetch USDC balance from Arc testnet (native balance)
       const usdcBalance = await fetchArcBalance(user.wallet.address);
+      console.log("USDC balance:", usdcBalance);
       
       if (usdcBalance) {
         setTokenBalances((prev) => ({
@@ -129,12 +134,15 @@ const SwapCard = () => {
 
       // Fetch EURC balance
       if (TOKEN_CONTRACTS.EURC) {
+        console.log("Fetching EURC balance from:", TOKEN_CONTRACTS.EURC);
         const eurcBalanceWei = await fetchERC20Balance(
           user.wallet.address,
           TOKEN_CONTRACTS.EURC
         );
-        if (eurcBalanceWei) {
-          const eurcBalance = parseFloat(eurcBalanceWei) / 10 ** 18;
+        console.log("EURC balance (wei):", eurcBalanceWei);
+        if (eurcBalanceWei && eurcBalanceWei !== "0x0") {
+          const eurcBalance = parseInt(eurcBalanceWei, 16) / 10 ** 18;
+          console.log("EURC balance (converted):", eurcBalance);
           setTokenBalances((prev) => ({
             ...prev,
             EURC: eurcBalance,
@@ -144,12 +152,15 @@ const SwapCard = () => {
 
       // Fetch SWPRC balance
       if (TOKEN_CONTRACTS.SWPRC) {
+        console.log("Fetching SWPRC balance from:", TOKEN_CONTRACTS.SWPRC);
         const swprcBalanceWei = await fetchERC20Balance(
           user.wallet.address,
           TOKEN_CONTRACTS.SWPRC
         );
-        if (swprcBalanceWei) {
-          const swprcBalance = parseFloat(swprcBalanceWei) / 10 ** 18;
+        console.log("SWPRC balance (wei):", swprcBalanceWei);
+        if (swprcBalanceWei && swprcBalanceWei !== "0x0") {
+          const swprcBalance = parseInt(swprcBalanceWei, 16) / 10 ** 18;
+          console.log("SWPRC balance (converted):", swprcBalance);
           setTokenBalances((prev) => ({
             ...prev,
             SWPRC: swprcBalance,
