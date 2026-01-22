@@ -9,11 +9,11 @@ export const ARC_TESTNET_CONFIG = {
 };
 
 // Token Contract Addresses on Arc Testnet
-export const TOKEN_CONTRACTS = {
+export const TOKEN_CONTRACTS: Record<string, string> = {
+  USDC: "0x0000000000000000000000000000000000000001", // Placeholder for USDC (native)
   EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
   SWPRC: "0xBE7477BF91526FC9988C8f33e91B6db687119D45",
   // Add other token addresses as needed
-  // USDC: "0x...",
   // USDT: "0x...",
   // UNI: "0x...",
   // HYPE: "0x...",
@@ -52,42 +52,145 @@ export const ARC_POOLS = {
 };
 
 /**
- * Find the pool contract and local token indices for a token pair
- * @param tokenA - First token symbol
- * @param tokenB - Second token symbol
- * @returns Pool info with address and local indices, or null if no pool exists
+ * Cache for router token indices to avoid repeated RPC calls
  */
-export function getPoolForTokenPair(
-  tokenA: string,
-  tokenB: string
-): {
-  address: string;
-  tokenAIndex: 0 | 1;
-  tokenBIndex: 0 | 1;
-} | null {
-  // Check both orderings to find the pool
-  const pairKey1 = `${tokenA}/${tokenB}`;
-  const pairKey2 = `${tokenB}/${tokenA}`;
+const tokenIndexCache: Map<string, number> = new Map();
 
-  const pool1 = ARC_POOLS.pools[pairKey1 as keyof typeof ARC_POOLS.pools];
-  if (pool1) {
-    return {
-      address: pool1.address,
-      tokenAIndex: 0,
-      tokenBIndex: 1,
-    };
+/**
+ * Get the token address at a specific index in the router
+ * @param routerAddress - Address of the swap router
+ * @param tokenIndex - Index of the token in the router
+ * @returns Token address or null if not found
+ */
+async function getRouterTokenAddress(
+  routerAddress: string,
+  tokenIndex: number
+): Promise<string | null> {
+  try {
+    // Encode tokens(uint256) function call
+    // Function selector for tokens(uint256): 0xfc735e99
+    const functionSelector = "0xfc735e99";
+    const indexHex = BigInt(tokenIndex).toString(16).padStart(64, "0");
+    const encodedData = functionSelector + indexHex;
+
+    const response = await fetch(ARC_TESTNET_CONFIG.rpcUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: Date.now(),
+        method: "eth_call",
+        params: [
+          {
+            to: routerAddress,
+            data: encodedData,
+          },
+          "latest",
+        ],
+      }),
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      console.error(`RPC Error getting token at index ${tokenIndex}:`, data.error);
+      return null;
+    }
+
+    if (data.result && data.result !== "0x") {
+      // Extract the address from the result (last 40 characters of the 32-byte value)
+      const address = "0x" + data.result.slice(-40);
+      return address.toLowerCase();
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`Error getting router token at index ${tokenIndex}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Find the index of a token in the router by its address
+ * @param routerAddress - Address of the swap router
+ * @param tokenAddress - Token contract address to find
+ * @returns Token index or -1 if not found
+ */
+export async function getRouterTokenIndex(
+  routerAddress: string,
+  tokenAddress: string
+): Promise<number> {
+  const normalizedAddress = tokenAddress.toLowerCase();
+  const cacheKey = `${routerAddress.toLowerCase()}_${normalizedAddress}`;
+
+  // Check cache first
+  if (tokenIndexCache.has(cacheKey)) {
+    return tokenIndexCache.get(cacheKey)!;
   }
 
-  const pool2 = ARC_POOLS.pools[pairKey2 as keyof typeof ARC_POOLS.pools];
-  if (pool2) {
-    return {
-      address: pool2.address,
-      tokenAIndex: 1,
-      tokenBIndex: 0,
-    };
-  }
+  try {
+    // Get token count to know how many indices to check
+    const countData = encodeFunctionData("getTokenCount", []);
 
-  return null;
+    const countResponse = await makeJsonRpcCall("eth_call", [
+      {
+        to: routerAddress,
+        data: countData,
+      },
+      "latest",
+    ]);
+
+    const tokenCount = parseInt(countResponse, 16);
+    console.log("Router token count:", tokenCount);
+
+    // Check each index to find the matching token
+    for (let i = 0; i < tokenCount; i++) {
+      const tokenAddr = await getRouterTokenAddress(routerAddress, i);
+      if (tokenAddr === normalizedAddress) {
+        tokenIndexCache.set(cacheKey, i);
+        console.log(`Token ${tokenAddress} found at index ${i}`);
+        return i;
+      }
+    }
+
+    console.warn(`Token ${tokenAddress} not found in router`);
+    return -1;
+  } catch (error) {
+    console.error(`Error finding token index for ${tokenAddress}:`, error);
+    return -1;
+  }
+}
+
+/**
+ * Find token indices for a swap pair in the router
+ * @param routerAddress - Address of the swap router
+ * @param tokenInAddress - Input token contract address
+ * @param tokenOutAddress - Output token contract address
+ * @returns Object with token indices or null if either token not found
+ */
+export async function getRouterTokenIndices(
+  routerAddress: string,
+  tokenInAddress: string,
+  tokenOutAddress: string
+): Promise<{ tokenInIndex: number; tokenOutIndex: number } | null> {
+  try {
+    const tokenInIndex = await getRouterTokenIndex(routerAddress, tokenInAddress);
+    const tokenOutIndex = await getRouterTokenIndex(routerAddress, tokenOutAddress);
+
+    if (tokenInIndex === -1 || tokenOutIndex === -1) {
+      console.warn(
+        `Token not found in router. In: ${tokenInIndex}, Out: ${tokenOutIndex}`
+      );
+      return null;
+    }
+
+    return { tokenInIndex, tokenOutIndex };
+  } catch (error) {
+    console.error("Error getting router token indices:", error);
+    return null;
+  }
 }
 
 // Swap Router ABI - this contract handles token swaps with get_dy and swap functions
@@ -127,6 +230,13 @@ export const SWAP_ROUTER_ABI = [
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "tokens",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [{ name: "", type: "address" }],
   },
 ];
 
@@ -384,30 +494,46 @@ async function makeJsonRpcCall(
 }
 
 /**
- * Get a quote for swapping between two tokens
- * Calls the get_dy function on the specific pool contract
+ * Get a quote for swapping between two tokens using the Arc swap router
  * 
- * @param poolAddress - Address of the pool contract
- * @param tokenInIndex - Local index of input token (0 or 1) within the pool
- * @param tokenOutIndex - Local index of output token (0 or 1) within the pool
+ * @param tokenInAddress - Input token contract address
+ * @param tokenOutAddress - Output token contract address
  * @param amountIn - Amount to swap (in wei)
  * @returns Amount out (in wei)
  */
 export async function getSwapQuote(
-  poolAddress: string,
-  tokenInIndex: number,
-  tokenOutIndex: number,
+  tokenInAddress: string,
+  tokenOutAddress: string,
   amountIn: string
 ): Promise<string> {
   try {
+    const routerAddress = ARC_POOLS.router;
+
+    // Find token indices in the router
+    const indices = await getRouterTokenIndices(
+      routerAddress,
+      tokenInAddress,
+      tokenOutAddress
+    );
+
+    if (!indices) {
+      throw new Error(
+        `Cannot find token indices for swap. In: ${tokenInAddress}, Out: ${tokenOutAddress}`
+      );
+    }
+
+    const { tokenInIndex, tokenOutIndex } = indices;
+
     const data = encodeFunctionData("get_dy", [
       BigInt(tokenInIndex).toString(),
       BigInt(tokenOutIndex).toString(),
       BigInt(amountIn).toString(),
     ]);
 
-    console.log("Getting swap quote from pool:", {
-      poolAddress,
+    console.log("Getting swap quote from router:", {
+      routerAddress,
+      tokenInAddress,
+      tokenOutAddress,
       tokenInIndex,
       tokenOutIndex,
       amountIn,
@@ -416,7 +542,7 @@ export async function getSwapQuote(
 
     const result = await makeJsonRpcCall("eth_call", [
       {
-        to: poolAddress,
+        to: routerAddress,
         data,
       },
       "latest",
@@ -429,9 +555,8 @@ export async function getSwapQuote(
     return amount;
   } catch (error) {
     console.error("Error getting swap quote:", {
-      poolAddress,
-      tokenInIndex,
-      tokenOutIndex,
+      tokenInAddress,
+      tokenOutAddress,
       amountIn,
       error,
     });

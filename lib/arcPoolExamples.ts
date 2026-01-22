@@ -11,7 +11,7 @@ import {
   prepareSwapTransaction,
   listAvailablePools,
   getPoolInfo,
-  getPoolForTokenPair,
+  TOKEN_CONTRACTS,
 } from "@/lib/arcNetwork";
 import { useArcPools } from "@/lib/useArcPools";
 
@@ -39,21 +39,16 @@ export async function example_getPoolBalances() {
 // ============================================================================
 
 export async function example_getSwapQuote() {
-  // Get pool for USDC/EURC swap
-  const poolInfo = getPoolForTokenPair("USDC", "EURC");
+  // Swap 1000 USDC to EURC using the swap router
+  // Note: USDC is at placeholder address since it's native
+  const tokenInAddress = TOKEN_CONTRACTS.USDC;
+  const tokenOutAddress = TOKEN_CONTRACTS.EURC;
   
-  if (!poolInfo) {
-    console.log("No pool found for USDC/EURC");
-    return;
-  }
-
-  // Swap 1000 USDC (with 6 decimals) to EURC
-  const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(6)).toString();
+  const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(6)).toString(); // 1000 USDC with 6 decimals
 
   const amountOut = await getSwapQuote(
-    poolInfo.address,
-    poolInfo.tokenAIndex, // USDC position in pool
-    poolInfo.tokenBIndex, // EURC position in pool
+    tokenInAddress,
+    tokenOutAddress,
     amountIn
   );
 
@@ -117,9 +112,7 @@ export function ExampleSwapComponent() {
   const handleGetQuote = async () => {
     const poolInfo = getPoolInfo("USDC/EURC");
     if (poolInfo) {
-      const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(6)).toString();
-
-      await getQuote(poolInfo.address, 0, 1, amountIn);
+      await getQuote(poolInfo.address);
     }
   };
 
