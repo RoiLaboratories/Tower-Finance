@@ -25,6 +25,7 @@ export {
   fetchArcBalance,
   formatBalance,
   getSwapQuote,
+  getPoolForTokenPair,
   getPoolBalances,
   prepareSwapTransaction,
   getPoolInfo,

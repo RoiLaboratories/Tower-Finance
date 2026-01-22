@@ -31,16 +31,64 @@ export const TOKEN_DECIMALS: Record<string, number> = {
 };
 
 // Arc Pool Configuration
-// NOTE: The router address is the actual swap contract with get_dy and swap functions
-// Individual pool addresses below are for liquidity management only
+// IMPORTANT: Each pool contract has its own get_dy function with local indices (0, 1)
+// Token 0 is always listed first, Token 1 is listed second
 export const ARC_POOLS = {
-  router: "0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC", // Swap router - use this for quotes and swaps
+  router: "0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC", // Use this for swap execution only
   pools: {
-    "USDC/EURC": "0xd22e4fB80E21e8d2C91131eC2D6b0C000491934B",
-    "USDC/SWPRC": "0x613bc8A188a571e7Ffe3F884FabAB0F43ABB8282",
-    "EURC/SWPRC": "0x9463DE67E73B42B2cE5e45cab7e32184B9c24939",
+    "USDC/EURC": {
+      address: "0xd22e4fB80E21e8d2C91131eC2D6b0C000491934B",
+      tokens: ["USDC", "EURC"],
+    },
+    "USDC/SWPRC": {
+      address: "0x613bc8A188a571e7Ffe3F884FabAB0F43ABB8282",
+      tokens: ["USDC", "SWPRC"],
+    },
+    "EURC/SWPRC": {
+      address: "0x9463DE67E73B42B2cE5e45cab7e32184B9c24939",
+      tokens: ["EURC", "SWPRC"],
+    },
   },
 };
+
+/**
+ * Find the pool contract and local token indices for a token pair
+ * @param tokenA - First token symbol
+ * @param tokenB - Second token symbol
+ * @returns Pool info with address and local indices, or null if no pool exists
+ */
+export function getPoolForTokenPair(
+  tokenA: string,
+  tokenB: string
+): {
+  address: string;
+  tokenAIndex: 0 | 1;
+  tokenBIndex: 0 | 1;
+} | null {
+  // Check both orderings to find the pool
+  const pairKey1 = `${tokenA}/${tokenB}`;
+  const pairKey2 = `${tokenB}/${tokenA}`;
+
+  const pool1 = ARC_POOLS.pools[pairKey1 as keyof typeof ARC_POOLS.pools];
+  if (pool1) {
+    return {
+      address: pool1.address,
+      tokenAIndex: 0,
+      tokenBIndex: 1,
+    };
+  }
+
+  const pool2 = ARC_POOLS.pools[pairKey2 as keyof typeof ARC_POOLS.pools];
+  if (pool2) {
+    return {
+      address: pool2.address,
+      tokenAIndex: 1,
+      tokenBIndex: 0,
+    };
+  }
+
+  return null;
+}
 
 // Swap Router ABI - this contract handles token swaps with get_dy and swap functions
 export const SWAP_ROUTER_ABI = [
@@ -337,14 +385,16 @@ async function makeJsonRpcCall(
 
 /**
  * Get a quote for swapping between two tokens
- * Uses the Arc swap router contract
+ * Calls the get_dy function on the specific pool contract
  * 
- * @param tokenInIndex - Index of input token in the router's token list
- * @param tokenOutIndex - Index of output token in the router's token list
+ * @param poolAddress - Address of the pool contract
+ * @param tokenInIndex - Local index of input token (0 or 1) within the pool
+ * @param tokenOutIndex - Local index of output token (0 or 1) within the pool
  * @param amountIn - Amount to swap (in wei)
  * @returns Amount out (in wei)
  */
 export async function getSwapQuote(
+  poolAddress: string,
   tokenInIndex: number,
   tokenOutIndex: number,
   amountIn: string
@@ -356,8 +406,8 @@ export async function getSwapQuote(
       BigInt(amountIn).toString(),
     ]);
 
-    console.log("Getting swap quote from router:", {
-      router: ARC_POOLS.router,
+    console.log("Getting swap quote from pool:", {
+      poolAddress,
       tokenInIndex,
       tokenOutIndex,
       amountIn,
@@ -366,7 +416,7 @@ export async function getSwapQuote(
 
     const result = await makeJsonRpcCall("eth_call", [
       {
-        to: ARC_POOLS.router,
+        to: poolAddress,
         data,
       },
       "latest",
@@ -379,7 +429,7 @@ export async function getSwapQuote(
     return amount;
   } catch (error) {
     console.error("Error getting swap quote:", {
-      router: ARC_POOLS.router,
+      poolAddress,
       tokenInIndex,
       tokenOutIndex,
       amountIn,
@@ -455,16 +505,16 @@ export function prepareSwapTransaction(
 /**
  * Get pool info for a specific pool pair
  * @param pairName - Pool pair name (e.g., "USDC/EURC")
- * @returns Pool address and info
+ * @returns Pool address and token info
  */
 export function getPoolInfo(
   pairName: string
-): { address: string; pair: string } | null {
-  const address = ARC_POOLS.pools[pairName as keyof typeof ARC_POOLS.pools];
-  if (!address) {
+): { address: string; pair: string; tokens: string[] } | null {
+  const poolData = ARC_POOLS.pools[pairName as keyof typeof ARC_POOLS.pools];
+  if (!poolData) {
     return null;
   }
-  return { address, pair: pairName };
+  return { address: poolData.address, pair: pairName, tokens: poolData.tokens };
 }
 
 /**

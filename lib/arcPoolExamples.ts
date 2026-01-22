@@ -11,7 +11,7 @@ import {
   prepareSwapTransaction,
   listAvailablePools,
   getPoolInfo,
-  ARC_POOLS,
+  getPoolForTokenPair,
 } from "@/lib/arcNetwork";
 import { useArcPools } from "@/lib/useArcPools";
 
@@ -21,9 +21,14 @@ import { useArcPools } from "@/lib/useArcPools";
 
 export async function example_getPoolBalances() {
   // Get balances for USDC/EURC pool
-  const poolAddress = ARC_POOLS.pools["USDC/EURC"];
+  const poolInfo = getPoolInfo("USDC/EURC");
+  
+  if (!poolInfo) {
+    console.log("Pool not found");
+    return;
+  }
 
-  const [balance0, balance1] = await getPoolBalances(poolAddress);
+  const [balance0, balance1] = await getPoolBalances(poolInfo.address);
 
   console.log("USDC Balance:", balance0);
   console.log("EURC Balance:", balance1);
@@ -34,17 +39,26 @@ export async function example_getPoolBalances() {
 // ============================================================================
 
 export async function example_getSwapQuote() {
-  // Swap 1000 USDC (with 18 decimals) to EURC
-  const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(18)).toString();
+  // Get pool for USDC/EURC swap
+  const poolInfo = getPoolForTokenPair("USDC", "EURC");
+  
+  if (!poolInfo) {
+    console.log("No pool found for USDC/EURC");
+    return;
+  }
+
+  // Swap 1000 USDC (with 6 decimals) to EURC
+  const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(6)).toString();
 
   const amountOut = await getSwapQuote(
-    0, // USDC is token 0
-    1, // EURC is token 1
+    poolInfo.address,
+    poolInfo.tokenAIndex, // USDC position in pool
+    poolInfo.tokenBIndex, // EURC position in pool
     amountIn
   );
 
   console.log("Input: 1000 USDC");
-  console.log("Output: " + (BigInt(amountOut) / (BigInt(10) ** BigInt(18))).toString() + " EURC");
+  console.log("Output: " + (BigInt(amountOut) / (BigInt(10) ** BigInt(6))).toString() + " EURC");
 }
 
 // ============================================================================
@@ -93,16 +107,20 @@ export function ExampleSwapComponent() {
 
   // Fetch balances for USDC/EURC
   const handleFetchBalances = async () => {
-    const poolAddress = ARC_POOLS.pools["USDC/EURC"];
-    await fetchPoolBalances(poolAddress);
+    const poolInfo = getPoolInfo("USDC/EURC");
+    if (poolInfo) {
+      await fetchPoolBalances(poolInfo.address);
+    }
   };
 
   // Get a quote
   const handleGetQuote = async () => {
-    const poolAddress = ARC_POOLS.pools["USDC/EURC"];
-    const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(18)).toString();
+    const poolInfo = getPoolInfo("USDC/EURC");
+    if (poolInfo) {
+      const amountIn = (BigInt(1000) * BigInt(10) ** BigInt(6)).toString();
 
-    await getQuote(poolAddress, 0, 1, amountIn);
+      await getQuote(poolInfo.address, 0, 1, amountIn);
+    }
   };
 
   // Get balances
