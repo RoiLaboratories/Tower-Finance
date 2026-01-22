@@ -239,17 +239,14 @@ const SwapCard = () => {
       let tokenOutAddress: string | null = null;
 
       // Map token symbols to contract addresses
-      if (sellToken.symbol === "USDC") {
-        // USDC is the native currency on Arc
-        tokenInAddress = "0x0000000000000000000000000000000000000001"; // Placeholder for USDC
-      } else if (TOKEN_CONTRACTS[sellToken.symbol as keyof typeof TOKEN_CONTRACTS]) {
-        tokenInAddress = TOKEN_CONTRACTS[sellToken.symbol as keyof typeof TOKEN_CONTRACTS];
+      const addressMap: Record<string, string> = TOKEN_CONTRACTS;
+      
+      if (addressMap[sellToken.symbol]) {
+        tokenInAddress = addressMap[sellToken.symbol];
       }
 
-      if (receiveToken.symbol === "USDC") {
-        tokenOutAddress = "0x0000000000000000000000000000000000000001"; // Placeholder for USDC
-      } else if (TOKEN_CONTRACTS[receiveToken.symbol as keyof typeof TOKEN_CONTRACTS]) {
-        tokenOutAddress = TOKEN_CONTRACTS[receiveToken.symbol as keyof typeof TOKEN_CONTRACTS];
+      if (addressMap[receiveToken.symbol]) {
+        tokenOutAddress = addressMap[receiveToken.symbol];
       }
 
       if (!tokenInAddress || !tokenOutAddress) {
@@ -367,16 +364,14 @@ const SwapCard = () => {
       let tokenInAddress: string | null = null;
       let tokenOutAddress: string | null = null;
 
-      if (sellToken.symbol === "USDC") {
-        tokenInAddress = "0x0000000000000000000000000000000000000001";
-      } else if (TOKEN_CONTRACTS[sellToken.symbol as keyof typeof TOKEN_CONTRACTS]) {
-        tokenInAddress = TOKEN_CONTRACTS[sellToken.symbol as keyof typeof TOKEN_CONTRACTS];
+      const addressMap: Record<string, string> = TOKEN_CONTRACTS;
+      
+      if (addressMap[sellToken.symbol]) {
+        tokenInAddress = addressMap[sellToken.symbol];
       }
 
-      if (receiveToken.symbol === "USDC") {
-        tokenOutAddress = "0x0000000000000000000000000000000000000001";
-      } else if (TOKEN_CONTRACTS[receiveToken.symbol as keyof typeof TOKEN_CONTRACTS]) {
-        tokenOutAddress = TOKEN_CONTRACTS[receiveToken.symbol as keyof typeof TOKEN_CONTRACTS];
+      if (addressMap[receiveToken.symbol]) {
+        tokenOutAddress = addressMap[receiveToken.symbol];
       }
 
       if (!tokenInAddress || !tokenOutAddress) {

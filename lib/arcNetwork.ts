@@ -10,7 +10,7 @@ export const ARC_TESTNET_CONFIG = {
 
 // Token Contract Addresses on Arc Testnet
 export const TOKEN_CONTRACTS: Record<string, string> = {
-  USDC: "0x0000000000000000000000000000000000000001", // Placeholder for USDC (native)
+  USDC: "0x3600000000000000000000000000000000000000",
   EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
   SWPRC: "0xBE7477BF91526FC9988C8f33e91B6db687119D45",
   // Add other token addresses as needed
@@ -67,7 +67,7 @@ export async function getRouterTokenIndex(
   // Hardcoded token index mapping for Arc testnet router
   // These indices are based on the router configuration
   const tokenIndexMap: Record<string, number> = {
-    "0x0000000000000000000000000000000000000001": 0, // USDC (native/placeholder)
+    "0x3600000000000000000000000000000000000000": 0, // USDC
     "0x89b50855aa3be2f677cd6303cec089b5f319d72a": 1, // EURC
     "0xbe7477bf91526fc9988c8f33e91b6db687119d45": 2, // SWPRC
   };
