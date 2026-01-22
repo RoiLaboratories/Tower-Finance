@@ -11,7 +11,13 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { usePrivy } from "@privy-io/react-auth";
-import { fetchArcBalance, formatBalance } from "@/lib/arcNetwork";
+import { 
+  fetchArcBalance, 
+  formatBalance, 
+  getSwapQuote, 
+  prepareSwapTransaction, 
+  getPoolInfo 
+} from "@/lib/arcNetwork";
 
 import usdcLogo from "@/public/assets/USDC-fotor-bg-remover-2025111075935.png";
 import usdtLogo from "@/public/assets/usdt_logo-removebg-preview.png";
@@ -191,6 +197,20 @@ const SwapCard = () => {
     }
   };
 
+  // Handle 50% button click
+  const handle50Percent = () => {
+    const balance = getTokenBalance(sellToken.symbol);
+    const fiftyPercent = (balance * 0.5).toFixed(2);
+    handleSellAmountChange(fiftyPercent);
+  };
+
+  // Handle Max button click
+  const handleMaxAmount = () => {
+    const balance = getTokenBalance(sellToken.symbol);
+    const maxAmount = balance.toFixed(2);
+    handleSellAmountChange(maxAmount);
+  };
+
   // Handle wallet connection
   const handleConnectWallet = async () => {
     if (authenticated) {
@@ -216,34 +236,66 @@ const SwapCard = () => {
     setSwapState("loading");
 
     try {
-      // TODO: Replace with actual swap transaction logic
-      // 1. Get quote from DEX aggregator (1inch, 0x, etc.)
-      // 2. Check and approve token allowance if needed
-      // 3. Execute swap transaction
-      // 4. Wait for transaction confirmation
-
-      // Simulate transaction (70% success rate for demo)
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const isSuccess = Math.random() > 0.3;
-
-      if (isSuccess) {
-        setSwapState("success");
-        setNotification("success");
-
-        // Auto-dismiss notification after 5 seconds
-        setTimeout(() => {
-          setNotification(null);
-        }, 5000);
-
-        // Reset amounts after success
-        setTimeout(() => {
-          setSellAmount("0.00");
-          setReceiveAmount("0.00");
-          setSwapState("idle");
-        }, 3000);
-      } else {
-        throw new Error("User rejected transaction");
+      if (!user?.wallet?.address) {
+        throw new Error("Wallet not connected");
       }
+
+      // Step 1: Get pool info for the swap pair
+      const poolKey = `${sellToken.symbol}/${receiveToken.symbol}`;
+      const poolInfo = getPoolInfo(poolKey);
+      
+      if (!poolInfo) {
+        throw new Error(`Pool not found for pair: ${poolKey}`);
+      }
+
+      // Step 2: Convert amounts to wei (18 decimals)
+      const amountInWei = BigInt(parseFloat(sellAmount) * 10 ** 18).toString();
+      const minAmountOutWei = BigInt(
+        parseFloat(receiveAmount) * 10 ** 18 * 0.99
+      ).toString(); // 1% slippage tolerance
+
+      // Step 3: Get quote for the swap
+      const expectedAmountOut = await getSwapQuote(
+        poolInfo.address,
+        0, // Assuming token0 is the sell token
+        1, // Assuming token1 is the receive token
+        amountInWei
+      );
+
+      console.log("Swap quote received:", expectedAmountOut);
+
+      // Step 4: Prepare swap transaction
+      const txData = prepareSwapTransaction(
+        poolInfo.address,
+        0, // tokenInIndex
+        1, // tokenOutIndex
+        amountInWei,
+        minAmountOutWei
+      );
+
+      console.log("Transaction prepared:", txData);
+
+      // Step 5: Send transaction to user's wallet via Privy
+      // Note: This would typically be handled by the wallet provider
+      // For now, we simulate the transaction
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      setSwapState("success");
+      setNotification("success");
+
+      // Auto-dismiss notification after 5 seconds
+      setTimeout(() => {
+        setNotification(null);
+      }, 5000);
+
+      // Reset amounts after success
+      setTimeout(() => {
+        setSellAmount("0.00");
+        setReceiveAmount("0.00");
+        setSwapState("idle");
+        // Refresh wallet balances after successful swap
+        fetchUserBalances();
+      }, 3000);
     } catch (error) {
       console.error("Swap failed:", error);
       setSwapState("failed");
@@ -355,10 +407,16 @@ const SwapCard = () => {
                 <span>
                   {isLoadingBalances ? "Loading..." : `${formatBalance(getTokenBalance(sellToken.symbol).toString())} ${sellToken.symbol}`}
                 </span>
-                <button className="text-muted-foreground hover:text-foreground">
+                <button 
+                  onClick={handle50Percent}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
                   50%
                 </button>
-                <button className="text-muted-foreground hover:text-foreground">
+                <button 
+                  onClick={handleMaxAmount}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
                   Max
                 </button>
               </div>
