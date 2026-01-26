@@ -115,6 +115,44 @@ export async function getRouterTokenIndices(
   }
 }
 
+/**
+ * Find the pool that contains both tokens
+ * @param tokenInSymbol - Symbol of input token
+ * @param tokenOutSymbol - Symbol of output token
+ * @returns Object with pool address and local indices (0 or 1) or null if not found
+ */
+function findPoolForTokens(
+  tokenInSymbol: string,
+  tokenOutSymbol: string
+): {
+  poolAddress: string;
+  tokenInIndex: number;
+  tokenOutIndex: number;
+} | null {
+  const pools = Object.entries(ARC_POOLS.pools);
+
+  for (const [, poolInfo] of pools) {
+    const [token0, token1] = poolInfo.tokens;
+    
+    // Check both directions
+    if (token0 === tokenInSymbol && token1 === tokenOutSymbol) {
+      return {
+        poolAddress: poolInfo.address,
+        tokenInIndex: 0,
+        tokenOutIndex: 1,
+      };
+    } else if (token0 === tokenOutSymbol && token1 === tokenInSymbol) {
+      return {
+        poolAddress: poolInfo.address,
+        tokenInIndex: 1,
+        tokenOutIndex: 0,
+      };
+    }
+  }
+
+  return null;
+}
+
 // Swap Router ABI - this contract handles token swaps with get_dy and swap functions
 export const SWAP_ROUTER_ABI = [
   {
@@ -437,22 +475,35 @@ export async function getSwapQuote(
   amountIn: string
 ): Promise<string> {
   try {
-    const routerAddress = ARC_POOLS.router;
+    // Convert token addresses to symbols
+    const normalizedInAddress = tokenInAddress.toLowerCase();
+    const normalizedOutAddress = tokenOutAddress.toLowerCase();
 
-    // Find token indices in the router
-    const indices = await getRouterTokenIndices(
-      routerAddress,
-      tokenInAddress,
-      tokenOutAddress
-    );
+    const addressToSymbol: Record<string, string> = {
+      "0x3600000000000000000000000000000000000000": "USDC",
+      "0x89b50855aa3be2f677cd6303cec089b5f319d72a": "EURC",
+      "0xbe7477bf91526fc9988c8f33e91b6db687119d45": "SWPRC",
+    };
 
-    if (!indices) {
+    const tokenInSymbol = addressToSymbol[normalizedInAddress];
+    const tokenOutSymbol = addressToSymbol[normalizedOutAddress];
+
+    if (!tokenInSymbol || !tokenOutSymbol) {
       throw new Error(
-        `Cannot find token indices for swap. In: ${tokenInAddress}, Out: ${tokenOutAddress}`
+        `Cannot map token addresses to symbols. In: ${tokenInAddress}, Out: ${tokenOutAddress}`
       );
     }
 
-    const { tokenInIndex, tokenOutIndex } = indices;
+    // Find the pool that contains both tokens
+    const poolInfo = findPoolForTokens(tokenInSymbol, tokenOutSymbol);
+
+    if (!poolInfo) {
+      throw new Error(
+        `No pool found for tokens ${tokenInSymbol}/${tokenOutSymbol}`
+      );
+    }
+
+    const { poolAddress, tokenInIndex, tokenOutIndex } = poolInfo;
 
     const data = encodeFunctionData("get_dy", [
       BigInt(tokenInIndex).toString(),
@@ -460,10 +511,10 @@ export async function getSwapQuote(
       BigInt(amountIn).toString(),
     ]);
 
-    console.log("Getting swap quote from router:", {
-      routerAddress,
-      tokenInAddress,
-      tokenOutAddress,
+    console.log("Getting swap quote from pool:", {
+      poolAddress,
+      tokenInSymbol,
+      tokenOutSymbol,
       tokenInIndex,
       tokenOutIndex,
       amountIn,
@@ -472,7 +523,7 @@ export async function getSwapQuote(
 
     const result = await makeJsonRpcCall("eth_call", [
       {
-        to: routerAddress,
+        to: poolAddress,
         data,
       },
       "latest",
@@ -481,7 +532,7 @@ export async function getSwapQuote(
     console.log("Swap quote result:", result);
 
     // Parse the result (32 bytes for uint256)
-    const amount = BigInt(result).toString();
+    const amount = result.startsWith("0x") ? result : "0x" + result;
     return amount;
   } catch (error) {
     console.error("Error getting swap quote:", {
