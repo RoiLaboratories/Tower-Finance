@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { 
   fetchArcBalance, 
   fetchERC20Balance,
@@ -80,7 +80,8 @@ const TokenSelector = ({ selected, onOpenModal }: TokenSelectorProps) => {
 
 const SwapCard = () => {
   // Privy hook
-  const { user, login, authenticated, sendTransaction } = usePrivy();
+  const { user, login, authenticated } = usePrivy();
+  const { wallets } = useWallets();
 
   // Wallet and transaction states
   const [isWalletConnected, setIsWalletConnected] = useState(false);
@@ -367,6 +368,35 @@ const SwapCard = () => {
         throw new Error("Wallet not connected");
       }
 
+      // Get the connected wallet
+      const connectedWallet = wallets.find(
+        (w) => w.address?.toLowerCase() === user.wallet?.address?.toLowerCase()
+      );
+
+      if (!connectedWallet) {
+        throw new Error("Connected wallet not found. Please reconnect your wallet.");
+      }
+
+      // Get the provider from the connected wallet
+      const eip1193Provider = await connectedWallet.getEthereumProvider();
+      
+      if (!eip1193Provider) {
+        throw new Error("Failed to get wallet provider");
+      }
+
+      // Use the EIP1193 provider directly to send transactions
+      const sendTransactionViaProvider = async (txData: { to: string; value: string; data: string }) => {
+        const result = await eip1193Provider.request({
+          method: 'eth_sendTransaction',
+          params: [{
+            to: txData.to,
+            value: txData.value,
+            data: txData.data,
+          }],
+        });
+        return result as string;
+      };
+
       // Get token addresses for the swap
       let tokenInAddress: string | null = null;
       let tokenOutAddress: string | null = null;
@@ -421,9 +451,10 @@ const SwapCard = () => {
           approvalAmount: swapData.approvalAmount,
         });
 
-        // Send approval transaction via Privy
+        // Send approval transaction via provider
         try {
-          const approveTxHash = await sendTransaction({
+          console.log("Sending approval transaction...");
+          const approveTxHash = await sendTransactionViaProvider({
             to: tokenInAddress,
             value: "0",
             data: swapData.data,
@@ -434,27 +465,23 @@ const SwapCard = () => {
           // Wait for approval confirmation
           await new Promise((resolve) => setTimeout(resolve, 2000));
         } catch (approvalError) {
-          console.warn("Approval transaction may have already been done or user rejected", approvalError);
+          console.warn("Approval transaction failed or already approved:", approvalError);
+          // Continue with swap even if approval fails (it might already be approved)
         }
       }
 
-      // Step 4: Send swap transaction to user's wallet via Privy
-      console.log("Sending swap transaction:", {
+      // Step 4: Send swap transaction via provider
+      console.log("Sending swap transaction...");
+
+      const txHash = await sendTransactionViaProvider({
         to: swapData.to,
         value: swapData.value,
         data: swapData.data,
       });
 
-      const txResponse = await sendTransaction({
-        to: swapData.to,
-        value: swapData.value,
-        data: swapData.data,
-      });
-
-      console.log("Swap transaction executed with response:", txResponse);
+      console.log("Swap transaction executed with hash:", txHash);
       
-      // Extract hash from response - Privy returns transaction hash
-      const txHash = (typeof txResponse === 'string' ? txResponse : txResponse?.hash) as string;
+      // Store the transaction hash
       setTransactionHash(txHash);
       setSwapState("success");
       setNotification("success");
