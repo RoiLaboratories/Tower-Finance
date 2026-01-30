@@ -1,5 +1,5 @@
 "use client";
-import { X, Check, XCircle } from "lucide-react";
+import { X, Check, XCircle, ExternalLink } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface SwapNotificationProps {
@@ -9,6 +9,7 @@ interface SwapNotificationProps {
   receiveAmount: string;
   receiveToken: string;
   onClose: () => void;
+  transactionHash?: string | null;
 }
 
 const SwapNotification = ({
@@ -18,8 +19,17 @@ const SwapNotification = ({
   receiveAmount,
   receiveToken,
   onClose,
+  transactionHash,
 }: SwapNotificationProps) => {
   const isSuccess = type === "success";
+
+  const handleViewTransaction = () => {
+    if (transactionHash) {
+      // Arc Scan Testnet URL
+      const arcscanUrl = `https://testnet.arcscan.app/tx/${transactionHash}`;
+      window.open(arcscanUrl, "_blank");
+    }
+  };
 
   return (
     <motion.div
@@ -90,8 +100,13 @@ const SwapNotification = ({
                 </svg>
                 <span>Via Tower</span>
               </div>
-              <button className="bg-white text-black text-sm font-medium px-4 py-2 rounded-full hover:bg-gray-100 transition-colors">
+              <button
+                onClick={handleViewTransaction}
+                disabled={!transactionHash}
+                className="bg-white text-black text-sm font-medium px-4 py-2 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
                 View Transaction
+                <ExternalLink className="w-3 h-3" />
               </button>
             </>
           ) : (

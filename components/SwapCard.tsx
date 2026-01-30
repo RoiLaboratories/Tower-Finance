@@ -80,7 +80,7 @@ const TokenSelector = ({ selected, onOpenModal }: TokenSelectorProps) => {
 
 const SwapCard = () => {
   // Privy hook
-  const { user, login, authenticated } = usePrivy();
+  const { user, login, authenticated, sendTransaction } = usePrivy();
 
   // Wallet and transaction states
   const [isWalletConnected, setIsWalletConnected] = useState(false);
@@ -90,6 +90,7 @@ const SwapCard = () => {
   const [notification, setNotification] = useState<"success" | "failed" | null>(
     null
   );
+  const [transactionHash, setTransactionHash] = useState<string | null>(null);
 
   // Token and amount states
   const [sellAmount, setSellAmount] = useState("0.00");
@@ -399,6 +400,7 @@ const SwapCard = () => {
         tokenInAddress,
         tokenOutAddress,
         amountInWei,
+        walletAddress: user.wallet.address,
       });
 
       // Step 2: Get swap transaction data from QuantumExchange
@@ -418,15 +420,42 @@ const SwapCard = () => {
           approvalAddress: swapData.approvalAddress,
           approvalAmount: swapData.approvalAmount,
         });
-        // TODO: Implement approval transaction via Privy
-        // const approveTx = await tokenContract.approve(swapData.approvalAddress, swapData.approvalAmount);
+
+        // Send approval transaction via Privy
+        try {
+          const approveTxHash = await sendTransaction({
+            to: tokenInAddress,
+            value: "0",
+            data: swapData.data,
+          });
+
+          console.log("Approval transaction sent:", approveTxHash);
+
+          // Wait for approval confirmation
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        } catch (approvalError) {
+          console.warn("Approval transaction may have already been done or user rejected", approvalError);
+        }
       }
 
       // Step 4: Send swap transaction to user's wallet via Privy
-      // Note: This would typically be handled by the wallet provider
-      // For now, we simulate the transaction
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      console.log("Sending swap transaction:", {
+        to: swapData.to,
+        value: swapData.value,
+        data: swapData.data,
+      });
 
+      const txResponse = await sendTransaction({
+        to: swapData.to,
+        value: swapData.value,
+        data: swapData.data,
+      });
+
+      console.log("Swap transaction executed with response:", txResponse);
+      
+      // Extract hash from response - Privy returns transaction hash
+      const txHash = (typeof txResponse === 'string' ? txResponse : txResponse?.hash) as string;
+      setTransactionHash(txHash);
       setSwapState("success");
       setNotification("success");
 
@@ -440,6 +469,7 @@ const SwapCard = () => {
         setSellAmount("0.00");
         setReceiveAmount("0.00");
         setSwapState("idle");
+        setTransactionHash(null);
         // Refresh wallet balances after successful swap
         fetchUserBalances();
       }, 3000);
@@ -447,6 +477,7 @@ const SwapCard = () => {
       console.error("Swap failed:", error);
       setSwapState("failed");
       setNotification("failed");
+      setTransactionHash(null);
 
       // Auto-dismiss notification after 5 seconds
       setTimeout(() => {
@@ -509,6 +540,7 @@ const SwapCard = () => {
             receiveAmount={receiveAmount}
             receiveToken={receiveToken.symbol}
             onClose={() => setNotification(null)}
+            transactionHash={transactionHash}
           />
         )}
       </AnimatePresence>
