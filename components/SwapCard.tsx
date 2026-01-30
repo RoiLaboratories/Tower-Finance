@@ -385,10 +385,16 @@ const SwapCard = () => {
       }
 
       // Use the EIP1193 provider directly to send transactions
+      const userAddress = user.wallet?.address;
+      if (!userAddress) {
+        throw new Error("User wallet address not available");
+      }
+
       const sendTransactionViaProvider = async (txData: { to: string; value: string; data: string }) => {
         const result = await eip1193Provider.request({
           method: 'eth_sendTransaction',
           params: [{
+            from: userAddress, // Use the validated address
             to: txData.to,
             value: txData.value,
             data: txData.data,
