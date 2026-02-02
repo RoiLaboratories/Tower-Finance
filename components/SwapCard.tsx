@@ -390,17 +390,38 @@ const SwapCard = () => {
         throw new Error("User wallet address not available");
       }
 
-      const sendTransactionViaProvider = async (txData: { to: string; value: string; data: string }) => {
-        const result = await eip1193Provider.request({
-          method: 'eth_sendTransaction',
-          params: [{
-            from: userAddress, // Use the validated address
+      const sendTransactionViaProvider = async (txData: { to: string; value: string; data: string }, txType: string = "transaction") => {
+        try {
+          console.log(`[${txType}] Sending to provider:`, {
+            from: userAddress,
             to: txData.to,
             value: txData.value,
-            data: txData.data,
-          }],
-        });
-        return result as string;
+            dataLength: txData.data?.length || 0,
+            data: txData.data?.substring(0, 100) + "...",
+          });
+
+          const result = await eip1193Provider.request({
+            method: 'eth_sendTransaction',
+            params: [{
+              from: userAddress, // Use the validated address
+              to: txData.to,
+              value: txData.value,
+              data: txData.data,
+            }],
+          });
+
+          console.log(`[${txType}] Successfully sent, hash:`, result);
+          return result as string;
+        } catch (error: unknown) {
+          const errorObj = error instanceof Error ? error : new Error(String(error));
+          console.error(`[${txType}] Failed with error:`, {
+            message: errorObj.message,
+            code: (error as Record<string, unknown>)?.code,
+            data: (error as Record<string, unknown>)?.data,
+            fullError: error,
+          });
+          throw error;
+        }
       };
 
       // Get token addresses for the swap
@@ -464,20 +485,32 @@ const SwapCard = () => {
             to: tokenInAddress,
             value: "0",
             data: swapData.data,
-          });
+          }, "APPROVAL");
 
           console.log("Approval transaction sent:", approveTxHash);
 
           // Wait for approval confirmation
           await new Promise((resolve) => setTimeout(resolve, 2000));
-        } catch (approvalError) {
-          console.warn("Approval transaction failed or already approved:", approvalError);
+        } catch (approvalError: unknown) {
+          const approvalErrorObj = approvalError instanceof Error ? approvalError : new Error(String(approvalError));
+          console.error("Approval transaction error details:", {
+            message: approvalErrorObj.message,
+            code: (approvalError as Record<string, unknown>)?.code,
+            data: (approvalError as Record<string, unknown>)?.data,
+            fullError: approvalError,
+          });
+          console.warn("Approval transaction failed or already approved, continuing with swap...");
           // Continue with swap even if approval fails (it might already be approved)
         }
       }
 
       // Step 4: Send swap transaction via provider
       console.log("Sending swap transaction...");
+      console.log("Swap transaction data:", {
+        to: swapData.to,
+        value: swapData.value,
+        dataLength: swapData.data?.length || 0,
+      });
 
       // Try to estimate gas, but don't block if it fails
       // (some RPC endpoints have issues with gas estimation on complex transactions)
@@ -493,21 +526,60 @@ const SwapCard = () => {
           }],
         });
         console.log("Gas estimate successful:", gasEstimate);
-      } catch (estimateError) {
+      } catch (estimateError: unknown) {
         // Log the error but continue - the wallet will provide its own gas estimation
-        console.warn("Gas estimation failed (wallet will estimate):", estimateError);
+        const estimateErrorObj = estimateError instanceof Error ? estimateError : new Error(String(estimateError));
+        console.error("Gas estimation error details:", {
+          message: estimateErrorObj.message,
+          code: (estimateError as Record<string, unknown>)?.code,
+          data: (estimateError as Record<string, unknown>)?.data,
+        });
+        console.warn("Gas estimation failed (wallet will estimate)");
       }
 
       const txHash = await sendTransactionViaProvider({
         to: swapData.to,
         value: swapData.value,
         data: swapData.data,
-      });
+      }, "SWAP");
 
       console.log("Swap transaction executed with hash:", txHash);
       
-      // Wait a moment for the transaction to be picked up
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Wait for transaction receipt to verify success
+      let receipt = null;
+      let retries = 0;
+      const maxRetries = 30; // Try for up to 30 seconds (1 second intervals)
+      
+      while (receipt === null && retries < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        
+        try {
+          receipt = await eip1193Provider.request({
+            method: 'eth_getTransactionReceipt',
+            params: [txHash],
+          });
+          
+          if (receipt) {
+            console.log("Transaction receipt received:", receipt);
+            
+            // Check if transaction was successful (status === '0x1')
+            if (receipt.status === '0x0') {
+              throw new Error("Transaction failed on-chain (status: 0x0)");
+            }
+            break;
+          }
+        } catch (receiptError) {
+          console.error("Error fetching receipt:", receiptError);
+        }
+        
+        retries++;
+      }
+      
+      if (receipt === null) {
+        console.warn("Transaction receipt not received after 30 seconds, but hash was confirmed");
+      } else if (receipt.status === '0x0') {
+        throw new Error("Transaction failed on-chain");
+      }
       
       // Store the transaction hash
       setTransactionHash(txHash);
@@ -528,8 +600,16 @@ const SwapCard = () => {
         // Refresh wallet balances after successful swap
         fetchUserBalances();
       }, 3000);
-    } catch (error) {
-      console.error("Swap failed:", error);
+    } catch (error: unknown) {
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      console.error("Swap transaction error - Full details:", {
+        message: errorObj.message,
+        code: (error as Record<string, unknown>)?.code,
+        data: (error as Record<string, unknown>)?.data,
+        stack: errorObj.stack,
+        errorObj: error,
+      });
+      
       setSwapState("failed");
       setNotification("failed");
       setTransactionHash(null);
