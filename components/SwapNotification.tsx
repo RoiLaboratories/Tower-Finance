@@ -10,6 +10,8 @@ interface SwapNotificationProps {
   receiveToken: string;
   onClose: () => void;
   transactionHash?: string | null;
+  /** On-chain revert reason (e.g. "insufficient allowance") when swap failed */
+  revertReason?: string | null;
 }
 
 const SwapNotification = ({
@@ -20,6 +22,7 @@ const SwapNotification = ({
   receiveToken,
   onClose,
   transactionHash,
+  revertReason,
 }: SwapNotificationProps) => {
   const isSuccess = type === "success";
 
@@ -110,7 +113,9 @@ const SwapNotification = ({
               </button>
             </>
           ) : (
-            <p className="text-sm text-gray-300">User Rejected Request</p>
+            <p className="text-sm text-gray-300">
+              {revertReason ? revertReason : "Transaction failed or was rejected."}
+            </p>
           )}
         </div>
 

@@ -692,6 +692,61 @@ export function calculatePriceImpact(
 }
 
 /**
+ * Get revert reason by simulating the failed tx via public RPC (eth_call).
+ * Decodes Error(string) (selector 0x08c379a0) from revert data.
+ * Use this when the wallet RPC returns "Internal JSON-RPC error" for failed txs.
+ */
+export async function getRevertReasonViaPublicRpc(tx: {
+  from: string;
+  to: string;
+  value?: string;
+  data: string;
+}): Promise<string | null> {
+  try {
+    const body = {
+      jsonrpc: "2.0",
+      id: Date.now(),
+      method: "eth_call",
+      params: [
+        {
+          from: tx.from,
+          to: tx.to,
+          value: tx.value ?? "0x0",
+          data: tx.data,
+        },
+        "latest",
+      ],
+    };
+    const response = await fetch(ARC_TESTNET_CONFIG.rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+
+    if (!data.error || !data.error.data) return null;
+    const hex = typeof data.error.data === "string" ? data.error.data : data.error.data?.data;
+    if (!hex || typeof hex !== "string") return null;
+
+    const raw = hex.startsWith("0x") ? hex.slice(2) : hex;
+    // Error(string) selector = 0x08c379a0
+    if (raw.length < 8 || raw.slice(0, 8) !== "08c379a0") return null;
+    // skip selector (4 bytes), then offset (32 bytes), then length (32 bytes), then string bytes
+    const rest = raw.slice(8);
+    if (rest.length < 128) return null;
+    const lenHex = rest.slice(64, 128);
+    const len = parseInt(lenHex, 16);
+    if (len <= 0 || rest.length < 128 + len * 2) return null;
+    const strHex = rest.slice(128, 128 + len * 2);
+    const chars: number[] = [];
+    for (let i = 0; i < strHex.length; i += 2) chars.push(parseInt(strHex.slice(i, i + 2), 16));
+    return String.fromCharCode(...chars).replace(/\0/g, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * QuantumExchange API Integration
  * REST API based integration for getting swap quotes
  */

@@ -17,6 +17,7 @@ import {
   formatBalance, 
   getSwapQuoteFromQuantumExchange,
   getSwapTransactionFromQuantumExchange,
+  getRevertReasonViaPublicRpc,
   TOKEN_CONTRACTS,
   TOKEN_DECIMALS,
   ARC_CHAIN_HEX,
@@ -95,6 +96,7 @@ const SwapCard = () => {
     null
   );
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
+  const [revertReason, setRevertReason] = useState<string | null>(null);
 
   // Monitor chain ID changes
   useEffect(() => {
@@ -448,6 +450,7 @@ const SwapCard = () => {
   // Handle swap transaction
   const handleSwap = async () => {
     setSwapState("loading");
+    setRevertReason(null);
 
     try {
       if (!user?.wallet?.address) {
@@ -595,11 +598,25 @@ const SwapCard = () => {
         );
       }
 
-      // Step 1: Convert amounts to wei using correct decimals
+      // Step 1: Validate balance before proceeding
+      const sellAmountNum = parseFloat(sellAmount);
+      const balance = getTokenBalance(sellToken.symbol);
+      
+      if (sellAmountNum <= 0) {
+        throw new Error("Swap amount must be greater than 0");
+      }
+      
+      if (sellAmountNum > balance) {
+        throw new Error(
+          `Insufficient balance. You have ${balance.toFixed(6)} ${sellToken.symbol}, but trying to swap ${sellAmount} ${sellToken.symbol}`
+        );
+      }
+
+      // Step 2: Convert amounts to wei using correct decimals
       const sellTokenDecimals = TOKEN_DECIMALS[sellToken.symbol] || 18;
 
       const amountInWei = BigInt(
-        parseFloat(sellAmount) * 10 ** sellTokenDecimals
+        Math.floor(sellAmountNum * 10 ** sellTokenDecimals)
       ).toString();
 
       console.log("Preparing swap via QuantumExchange:", {
@@ -608,11 +625,13 @@ const SwapCard = () => {
         tokenInAddress,
         tokenOutAddress,
         amountInWei,
+        amountInHuman: sellAmount,
         walletAddress: user.wallet.address,
-        balanceOfSellToken: getTokenBalance(sellToken.symbol),
+        balanceOfSellToken: balance,
+        sellTokenDecimals,
       });
 
-      // Step 2: Get swap transaction data from QuantumExchange
+      // Step 3: Get swap transaction data from QuantumExchange
       const swapData = await getSwapTransactionFromQuantumExchange(
         tokenInAddress,
         tokenOutAddress,
@@ -621,9 +640,16 @@ const SwapCard = () => {
         user.wallet.address
       );
 
-      console.log("Swap transaction data received:", swapData);
+      console.log("Swap transaction data received:", {
+        to: swapData.to,
+        value: swapData.value,
+        dataLength: swapData.data?.length,
+        gasLimit: swapData.gasLimit,
+        approvalAddress: swapData.approvalAddress,
+        approvalAmount: swapData.approvalAmount,
+      });
 
-      // Step 3: Handle token approval if needed
+      // Step 4: Handle token approval if needed
       if (swapData.approvalAddress && swapData.approvalAmount) {
         console.log("Token approval needed:", {
           approvalAddress: swapData.approvalAddress,
@@ -649,7 +675,39 @@ const SwapCard = () => {
 
           console.log("Approval transaction sent:", approveTxHash);
 
-          // Wait for approval confirmation
+          // Wait for approval confirmation - poll until receipt is found
+          let approvalReceipt = null;
+          let approvalRetries = 0;
+          const maxApprovalRetries = 30; // Wait up to 30 seconds
+          
+          while (approvalReceipt === null && approvalRetries < maxApprovalRetries) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            
+            try {
+              approvalReceipt = await eip1193Provider.request({
+                method: 'eth_getTransactionReceipt',
+                params: [approveTxHash],
+              });
+              
+              if (approvalReceipt) {
+                if (approvalReceipt.status === '0x0') {
+                  throw new Error("Approval transaction failed on-chain");
+                }
+                console.log("Approval transaction confirmed:", approvalReceipt);
+                break;
+              }
+            } catch (err) {
+              // Continue polling
+            }
+            
+            approvalRetries++;
+          }
+          
+          if (!approvalReceipt) {
+            throw new Error("Approval transaction not confirmed after 30 seconds");
+          }
+          
+          // Additional wait to ensure block is finalized
           await new Promise((resolve) => setTimeout(resolve, 2000));
         } catch (approvalError: unknown) {
           // Better error serialization for approval errors
@@ -681,12 +739,14 @@ const SwapCard = () => {
           }
 
           console.error("Approval transaction error details:", approvalErrorDetails);
-          console.warn("Approval transaction failed or already approved, continuing with swap...");
-          // Continue with swap even if approval fails (it might already be approved)
+          // Don't continue if approval failed - the swap will fail anyway
+          throw new Error(
+            `Token approval failed: ${approvalErrorDetails.message || "Unknown error"}. Please try again.`
+          );
         }
       }
 
-      // Step 4: Send swap transaction via provider
+      // Step 5: Send swap transaction via provider
       console.log("Sending swap transaction...");
       console.log("Swap transaction data:", {
         to: swapData.to,
@@ -740,10 +800,24 @@ const SwapCard = () => {
         console.warn("Gas estimation failed (wallet will estimate)");
       }
 
+      // Ensure value is properly formatted (should be hex string)
+      const swapValue = swapData.value?.startsWith("0x")
+        ? swapData.value
+        : swapData.value
+        ? toHexQuantity(swapData.value)
+        : "0x0";
+
+      console.log("Final swap transaction parameters:", {
+        to: swapData.to,
+        value: swapValue,
+        dataLength: swapData.data?.length,
+        gasLimit: swapData.gasLimit,
+      });
+
       const txHash = await sendTransactionViaProvider(
         {
           to: swapData.to,
-          value: swapData.value,
+          value: swapValue,
           data: swapData.data,
           // Per QuantumExchange docs, use the provided gasLimit when available
           gas: swapData.gasLimit ?? undefined,
@@ -773,45 +847,41 @@ const SwapCard = () => {
             // Check if transaction was successful (status === '0x1')
             if (receipt.status === '0x0') {
               console.error("Transaction failed! Getting revert reason...");
-              
-              // Try to get the revert reason by calling eth_call on the failed transaction
+              let decodedReason: string | null = null;
+
               try {
                 const tx = await eip1193Provider.request({
                   method: 'eth_getTransactionByHash',
                   params: [txHash],
-                });
-                
-                console.log("Failed transaction data:", tx);
-                
-                // Try to call the same transaction to get the revert reason
-                const callResult = await eip1193Provider.request({
-                  method: 'eth_call',
-                  params: [
-                    {
-                      from: tx.from,
-                      to: tx.to,
-                      value: tx.value,
-                      data: tx.input,
-                    },
-                    'latest'
-                  ],
-                });
-                
-                console.log("eth_call result:", callResult);
+                }) as { from?: string; to?: string; value?: string; input?: string } | null;
+
+                if (tx?.from && tx?.to && tx?.input) {
+                  console.log("Failed transaction data:", tx);
+                  // Use public RPC for eth_call so we get revert data instead of "Internal JSON-RPC error"
+                  decodedReason = await getRevertReasonViaPublicRpc({
+                    from: tx.from,
+                    to: tx.to,
+                    value: tx.value ?? "0x0",
+                    data: tx.input,
+                  });
+                  if (decodedReason) {
+                    setRevertReason(decodedReason);
+                    console.error("Revert reason (decoded):", decodedReason);
+                  }
+                }
               } catch (callError: unknown) {
                 const callErrorObj = callError instanceof Error ? callError : new Error(String(callError));
                 console.error("Revert reason extraction error:", {
                   message: callErrorObj.message,
                   error: callError,
                 });
-                
-                // Try to decode the error message if it's available
-                if (callError instanceof Error && callError.message.includes('revert')) {
-                  console.error("Revert reason:", callError.message);
-                }
               }
-              
-              throw new Error("Transaction failed on-chain (status: 0x0)");
+
+              throw new Error(
+                decodedReason
+                  ? `Transaction failed: ${decodedReason}`
+                  : "Transaction failed on-chain (status: 0x0)"
+              );
             }
             break;
           }
@@ -835,6 +905,7 @@ const SwapCard = () => {
       
       // Store the transaction hash
       setTransactionHash(txHash);
+      setRevertReason(null);
       setSwapState("success");
       setNotification("success");
 
@@ -888,6 +959,7 @@ const SwapCard = () => {
       setSwapState("failed");
       setNotification("failed");
       setTransactionHash(null);
+      // revertReason already set when we decoded on-chain failure
 
       // Auto-dismiss notification after 5 seconds
       setTimeout(() => {
@@ -896,6 +968,7 @@ const SwapCard = () => {
 
       setTimeout(() => {
         setSwapState("idle");
+        setRevertReason(null);
       }, 3000);
     }
   };
@@ -951,6 +1024,7 @@ const SwapCard = () => {
             receiveToken={receiveToken.symbol}
             onClose={() => setNotification(null)}
             transactionHash={transactionHash}
+            revertReason={revertReason}
           />
         )}
       </AnimatePresence>
