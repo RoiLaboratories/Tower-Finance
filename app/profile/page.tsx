@@ -1,13 +1,53 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePrivy } from "@privy-io/react-auth";
 import TokenTicker from "@/components/TokenTicker";
 import Positions from "@/components/Positions";
 import Activities from "@/components/Activities";
+import { ARC_ADD_NETWORK_PARAMS, ARC_CHAIN_HEX } from "@/lib/arcNetwork";
 
 const Profile = () => {
   const [activeTab, setActiveTab] = useState("positions");
+  const { authenticated, user } = usePrivy();
+  const [chainId, setChainId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !(window as any).ethereum) return;
+    const { ethereum } = window as any;
+
+    const handleChainChanged = (newChainId: string) => {
+      setChainId(newChainId);
+    };
+
+    ethereum
+      .request?.({ method: "eth_chainId" })
+      .then((id: string) => setChainId(id))
+      .catch(() => setChainId(null));
+
+    ethereum.on?.("chainChanged", handleChainChanged);
+    return () => ethereum.removeListener?.("chainChanged", handleChainChanged);
+  }, []);
+
+  const isOnArcTestnet = chainId === ARC_CHAIN_HEX;
+  const displayAddress = useMemo(() => {
+    const addr = user?.wallet?.address;
+    if (!addr) return null;
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  }, [user?.wallet?.address]);
+
+  const handleAddArcNetwork = async () => {
+    if (typeof window === "undefined" || !(window as any).ethereum) return;
+    try {
+      await (window as any).ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: ARC_ADD_NETWORK_PARAMS,
+      });
+    } catch (error) {
+      console.error("Error adding Arc Testnet to wallet:", error);
+    }
+  };
 
   return (
     <div className="text-white min-h-screen">
@@ -46,7 +86,31 @@ const Profile = () => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.2 }}
             >
-              <p className="text-gray-400 mb-1">Not Connected</p>
+              <div className="flex items-center gap-3 mb-2">
+                <p className="text-gray-200 font-semibold">
+                  {authenticated ? "Connected" : "Not Connected"}
+                </p>
+                {displayAddress && (
+                  <span className="text-xs text-gray-400 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
+                    {displayAddress}
+                  </span>
+                )}
+              </div>
+
+              {!isOnArcTestnet && (
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-xs text-amber-300">
+                    Switch/add Arc Testnet
+                  </span>
+                  <button
+                    onClick={handleAddArcNetwork}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition"
+                  >
+                    Add Arc Testnet
+                  </button>
+                </div>
+              )}
+
               <h2 className="text-5xl font-bold mb-2">$0.00</h2>
               <p className="text-green-400 text-sm">
                 +0.00% <span className="text-gray-500">($0.00)</span>

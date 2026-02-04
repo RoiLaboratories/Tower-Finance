@@ -8,6 +8,27 @@ export const ARC_TESTNET_CONFIG = {
   faucetUrl: "https://faucet.circle.com",
 };
 
+// Arc testnet network params for wallets (Metamask-compatible)
+export const ARC_CHAIN_HEX = "0x4cdfb2"; // 5042002 in hex
+export const ARC_ADD_NETWORK_PARAMS = [
+  {
+    chainId: ARC_CHAIN_HEX,
+    chainName: "Arc Testnet",
+    nativeCurrency: {
+      name: "USDC",
+      symbol: "USDC",
+      decimals: 18,
+    },
+    rpcUrls: [
+      "https://rpc.testnet.arc.network",
+      "https://rpc.blockdaemon.testnet.arc.network",
+      "https://rpc.drpc.testnet.arc.network",
+      "https://rpc.quicknode.testnet.arc.network",
+    ],
+    blockExplorerUrls: ["https://testnet.arcscan.app"],
+  },
+];
+
 // QuantumExchange API Configuration
 export const QUANTUM_EXCHANGE_CONFIG = {
   baseUrl: "https://www.quantumexchange.app/api/v1",

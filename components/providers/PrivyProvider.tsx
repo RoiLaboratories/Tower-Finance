@@ -18,12 +18,9 @@ export const PrivyProvider = ({ children }: { children: ReactNode }) => {
             createOnLogin: "users-without-wallets",
           },
         },
-        externalWallets: {
-          solana: {},
-        },
       }}
     >
-      {children}
+      <div key="app-root">{children}</div>
     </PrivyProviderBase>
   );
 };
