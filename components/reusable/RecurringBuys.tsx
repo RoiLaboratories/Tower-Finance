@@ -70,12 +70,14 @@ export const RecurringBuys = () => {
 
       <AnimatePresence>
         <FrequencyModal
+          key="frequency-modal"
           isOpen={showFrequencyModal}
           onClose={() => setShowFrequencyModal(false)}
           onSelect={setFrequency}
           currentValue={frequency}
         />
         <DatePicker
+          key="date-picker"
           isOpen={showDatePicker}
           onClose={() => setShowDatePicker(false)}
           onSelect={setEndDate}

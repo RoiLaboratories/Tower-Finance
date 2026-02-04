@@ -33,7 +33,7 @@ const Profile = () => {
               className="w-24 h-24 rounded-full overflow-hidden bg-linear-to-br from-gray-700 to-gray-800 border-2 border-gray-600"
             >
               <Image
-                src="/assets/user.png"
+                src="/assets/Profile logo.svg"
                 alt="Profile"
                 width={96}
                 height={96}
