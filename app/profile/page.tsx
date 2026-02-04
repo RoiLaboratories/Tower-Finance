@@ -168,7 +168,11 @@ const Profile = () => {
 
         {/* Content Section */}
         <AnimatePresence mode="wait">
-          {activeTab === "positions" ? <Positions /> : <Activities />}
+          {activeTab === "positions" ? (
+            <Positions />
+          ) : (
+            <Activities isWalletConnected={authenticated} />
+          )}
         </AnimatePresence>
       </main>
     </div>

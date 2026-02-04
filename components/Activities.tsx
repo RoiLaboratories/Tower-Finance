@@ -2,8 +2,13 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { activitiesData } from "@/mockData/portfolioData";
 
-const Activities = () => {
-  //   const activities = activitiesData.length > 0 ? activitiesData : [];
+interface ActivitiesProps {
+  isWalletConnected?: boolean;
+}
+
+const Activities = ({ isWalletConnected = false }: ActivitiesProps) => {
+  // TODO: Replace with Supabase fetch when schema is ready (e.g. by user wallet address)
+  // const activities = activitiesData.length > 0 ? activitiesData : [];
   const activities: typeof activitiesData = [];
 
   return (
@@ -153,15 +158,19 @@ const Activities = () => {
           <div className="mb-6">
             <Image
               src="/assets/wallet.png"
-              alt="No wallet connected"
+              alt={isWalletConnected ? "No transactions yet" : "No wallet connected"}
               width={80}
               height={80}
               className="w-20 h-20 opacity-60"
             />
           </div>
-          <h4 className="text-xl font-semibold mb-2">No wallet Connected</h4>
+          <h4 className="text-xl font-semibold mb-2">
+            {isWalletConnected ? "No transactions yet" : "No wallet connected"}
+          </h4>
           <p className="text-gray-400 text-center">
-            Connect wallet with holdings to view data.
+            {isWalletConnected
+              ? "Your swap and transfer activity will appear here."
+              : "Connect your wallet to view activity."}
           </p>
         </motion.div>
       )}
