@@ -32,7 +32,7 @@ export const ARC_ADD_NETWORK_PARAMS = [
 // QuantumExchange API Configuration
 export const QUANTUM_EXCHANGE_CONFIG = {
   baseUrl: "https://www.quantumexchange.app/api/v1",
-  chainId: 1301,
+  chainId: 5042002,
   rpcUrl: "https://rpc.arc.testnet",
 };
 
@@ -262,6 +262,16 @@ export const ERC20_ABI = [
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
   },
+  {
+    name: "allowance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ];
 
 /**
@@ -340,6 +350,95 @@ export const fetchERC20Balance = async (
   } catch (error) {
     console.error(
       `Error fetching ERC20 balance for ${tokenAddress}:`,
+      error
+    );
+    return null;
+  }
+};
+
+/**
+ * Fetch ERC20 token allowance from Arc testnet
+ * @param ownerAddress - The token owner's wallet address
+ * @param spenderAddress - The spender's address (e.g., swap router)
+ * @param tokenAddress - The ERC20 token contract address
+ * @returns Allowance as string (in wei)
+ */
+export const fetchERC20Allowance = async (
+  ownerAddress: string,
+  spenderAddress: string,
+  tokenAddress: string
+): Promise<string | null> => {
+  try {
+    // Ensure addresses are in correct format (with 0x prefix)
+    const cleanOwnerAddress = ownerAddress.startsWith("0x")
+      ? ownerAddress
+      : `0x${ownerAddress}`;
+    const cleanSpenderAddress = spenderAddress.startsWith("0x")
+      ? spenderAddress
+      : `0x${spenderAddress}`;
+    const cleanTokenAddress = tokenAddress.startsWith("0x")
+      ? tokenAddress
+      : `0x${tokenAddress}`;
+
+    // Encode allowance function call: allowance(address owner, address spender)
+    // Function selector for allowance: 0xdd62ed3e
+    const functionSelector = "0xdd62ed3e";
+    const ownerPadded = cleanOwnerAddress.slice(2).padStart(64, "0");
+    const spenderPadded = cleanSpenderAddress.slice(2).padStart(64, "0");
+    const encodedData = functionSelector + ownerPadded + spenderPadded;
+
+    console.log("Fetching ERC20 allowance:", {
+      ownerAddress: cleanOwnerAddress,
+      spenderAddress: cleanSpenderAddress,
+      tokenAddress: cleanTokenAddress,
+      encodedData,
+    });
+
+    const response = await fetch(ARC_TESTNET_CONFIG.rpcUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: Date.now(),
+        method: "eth_call",
+        params: [
+          {
+            to: cleanTokenAddress,
+            data: encodedData,
+          },
+          "latest",
+        ],
+      }),
+    });
+
+    const data = await response.json();
+
+    console.log("ERC20 allowance response:", {
+      tokenAddress: cleanTokenAddress,
+      response: data,
+    });
+
+    if (data.error) {
+      console.error(
+        `RPC Error fetching ERC20 allowance for ${cleanTokenAddress}:`,
+        data.error
+      );
+      return null;
+    }
+
+    if (data.result && data.result !== "0x") {
+      return data.result;
+    }
+
+    console.warn(
+      `No allowance returned for token ${cleanTokenAddress}`
+    );
+    return "0x0";
+  } catch (error) {
+    console.error(
+      `Error fetching ERC20 allowance for ${tokenAddress}:`,
       error
     );
     return null;
@@ -691,10 +790,20 @@ export function calculatePriceImpact(
   }
 }
 
+/** Common Panic(uint256) codes from Solidity */
+const PANIC_MESSAGES: Record<number, string> = {
+  0x11: "Arithmetic underflow or overflow",
+  0x12: "Division or modulo by zero",
+  0x31: "Array index out of bounds",
+  0x32: "Array too long",
+  0x41: "Out of memory",
+  0x51: "Invalid opcode",
+  0x52: "Assertion failed",
+};
+
 /**
  * Get revert reason by simulating the failed tx via public RPC (eth_call).
- * Decodes Error(string) (selector 0x08c379a0) from revert data.
- * Use this when the wallet RPC returns "Internal JSON-RPC error" for failed txs.
+ * Decodes Error(string) (0x08c379a0) or Panic(uint256) (0x4e487b71), or returns RPC message.
  */
 export async function getRevertReasonViaPublicRpc(tx: {
   from: string;
@@ -724,23 +833,46 @@ export async function getRevertReasonViaPublicRpc(tx: {
     });
     const data = await response.json();
 
-    if (!data.error || !data.error.data) return null;
-    const hex = typeof data.error.data === "string" ? data.error.data : data.error.data?.data;
-    if (!hex || typeof hex !== "string") return null;
+    if (!data.error) return null;
 
-    const raw = hex.startsWith("0x") ? hex.slice(2) : hex;
+    const err = data.error as Record<string, unknown>;
+    const message = typeof err.message === "string" ? err.message : null;
+
+    // Get revert payload: some RPCs use error.data as string, or error.data.data
+    let hex: string | null = null;
+    if (typeof err.data === "string") hex = err.data;
+    else if (err.data && typeof err.data === "object" && typeof (err.data as Record<string, unknown>).data === "string")
+      hex = (err.data as Record<string, unknown>).data as string;
+    if (!hex || !hex.startsWith("0x")) return message || "Transaction reverted";
+
+    const raw = hex.slice(2);
+    if (raw.length < 8) return message || "Transaction reverted";
+
+    const selector = raw.slice(0, 8);
+
     // Error(string) selector = 0x08c379a0
-    if (raw.length < 8 || raw.slice(0, 8) !== "08c379a0") return null;
-    // skip selector (4 bytes), then offset (32 bytes), then length (32 bytes), then string bytes
-    const rest = raw.slice(8);
-    if (rest.length < 128) return null;
-    const lenHex = rest.slice(64, 128);
-    const len = parseInt(lenHex, 16);
-    if (len <= 0 || rest.length < 128 + len * 2) return null;
-    const strHex = rest.slice(128, 128 + len * 2);
-    const chars: number[] = [];
-    for (let i = 0; i < strHex.length; i += 2) chars.push(parseInt(strHex.slice(i, i + 2), 16));
-    return String.fromCharCode(...chars).replace(/\0/g, "") || null;
+    if (selector === "08c379a0") {
+      const rest = raw.slice(8);
+      if (rest.length < 128) return message || "Transaction reverted";
+      const lenHex = rest.slice(64, 128);
+      const len = parseInt(lenHex, 16);
+      if (len <= 0 || rest.length < 128 + len * 2) return message || "Transaction reverted";
+      const strHex = rest.slice(128, 128 + len * 2);
+      const chars: number[] = [];
+      for (let i = 0; i < strHex.length; i += 2) chars.push(parseInt(strHex.slice(i, i + 2), 16));
+      const decoded = String.fromCharCode(...chars).replace(/\0/g, "").trim();
+      return decoded || message || "Transaction reverted";
+    }
+
+    // Panic(uint256) selector = 0x4e487b71
+    if (selector === "4e487b71" && raw.length >= 72) {
+      const codeHex = raw.slice(8, 72);
+      const code = parseInt(codeHex, 16);
+      const panicMsg = PANIC_MESSAGES[code] ?? `Panic(0x${code.toString(16)})`;
+      return panicMsg;
+    }
+
+    return message || "Transaction reverted";
   } catch {
     return null;
   }
@@ -879,8 +1011,7 @@ export async function getSwapTransactionFromQuantumExchange(
   tokenOutAddress: string,
   amountIn: string,
   slippage: number,
-  recipient: string,
-  deadline: number = 300
+  recipient: string
 ): Promise<{
   to: string;
   data: string;
@@ -890,13 +1021,13 @@ export async function getSwapTransactionFromQuantumExchange(
   approvalAmount: string | null;
 }> {
   try {
+    // Match QuantumExchange docs: only fromToken, toToken, amount, slippage, recipient (no deadline)
     const params = new URLSearchParams({
       fromToken: tokenInAddress,
       toToken: tokenOutAddress,
       amount: amountIn,
       slippage: slippage.toString(),
       recipient: recipient,
-      deadline: (Math.floor(Date.now() / 1000) + deadline).toString(),
     });
 
     const url = `${QUANTUM_EXCHANGE_CONFIG.baseUrl}/swap?${params.toString()}`;

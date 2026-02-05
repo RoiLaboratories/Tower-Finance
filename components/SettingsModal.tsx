@@ -6,11 +6,15 @@ import { motion, AnimatePresence } from "framer-motion";
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  slippageTolerance: number;
+  onSlippageChange: (value: number) => void;
 }
 
-const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
-  const [slippage, setSlippage] = useState("0.2");
-  const [customSlippage, setCustomSlippage] = useState("");
+const PRESET_SLIPPAGE = [0.1, 0.2, 0.5];
+
+const SettingsModal = ({ isOpen, onClose, slippageTolerance, onSlippageChange }: SettingsModalProps) => {
+  const isPreset = PRESET_SLIPPAGE.includes(slippageTolerance);
+  const [customInput, setCustomInput] = useState(isPreset ? "" : String(slippageTolerance));
 
   if (!isOpen) return null;
 
@@ -49,15 +53,15 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
             <div>
               <h4 className="text-sm text-muted-foreground mb-3">Slippage</h4>
               <div className="flex items-center gap-2">
-                {["0.1", "0.2", "0.5"].map((value) => (
+                {PRESET_SLIPPAGE.map((value) => (
                   <motion.button
                     key={value}
                     onClick={() => {
-                      setSlippage(value);
-                      setCustomSlippage("");
+                      onSlippageChange(value);
+                      setCustomInput("");
                     }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      slippage === value && !customSlippage
+                      slippageTolerance === value
                         ? "bg-secondary text-foreground"
                         : "bg-[#1a1b1e] text-muted-foreground hover:bg-secondary/50"
                     }`}
@@ -69,10 +73,11 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 ))}
                 <motion.button
                   onClick={() => {
-                    setSlippage("custom");
+                    const parsed = parseFloat(customInput);
+                    if (!Number.isNaN(parsed) && parsed > 0) onSlippageChange(parsed);
                   }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    slippage === "custom" || customSlippage
+                    !isPreset
                       ? "bg-secondary text-foreground"
                       : "bg-[#1a1b1e] text-muted-foreground hover:bg-secondary/50"
                   }`}
@@ -83,12 +88,13 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 </motion.button>
                 <input
                   type="text"
-                  value={customSlippage}
+                  value={customInput}
                   onChange={(e) => {
                     const value = e.target.value;
                     if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                      setCustomSlippage(value);
-                      if (value) setSlippage("custom");
+                      setCustomInput(value);
+                      const parsed = parseFloat(value);
+                      if (value && !Number.isNaN(parsed) && parsed > 0) onSlippageChange(parsed);
                     }
                   }}
                   placeholder="0.0"

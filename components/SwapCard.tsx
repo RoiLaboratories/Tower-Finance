@@ -14,6 +14,7 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { 
   fetchArcBalance, 
   fetchERC20Balance,
+  fetchERC20Allowance,
   formatBalance, 
   getSwapQuoteFromQuantumExchange,
   getSwapTransactionFromQuantumExchange,
@@ -21,7 +22,8 @@ import {
   TOKEN_CONTRACTS,
   TOKEN_DECIMALS,
   ARC_CHAIN_HEX,
-  ARC_ADD_NETWORK_PARAMS
+  ARC_ADD_NETWORK_PARAMS,
+  ARC_POOLS,
 } from "@/lib/arcNetwork";
 
 import usdcLogo from "@/public/assets/USDC-fotor-bg-remover-2025111075935.png";
@@ -97,6 +99,8 @@ const SwapCard = () => {
   );
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
   const [revertReason, setRevertReason] = useState<string | null>(null);
+  const [slippageTolerance, setSlippageTolerance] = useState(1); // 1% default to reduce "execution reverted" from slippage
+  const [resetApprovalLoading, setResetApprovalLoading] = useState(false);
 
   // Monitor chain ID changes
   useEffect(() => {
@@ -370,7 +374,7 @@ const SwapCard = () => {
         tokenInAddress,
         tokenOutAddress,
         amountInWei,
-        0.5 // 0.5% slippage tolerance
+        slippageTolerance
       );
 
       console.log("Quote received from QuantumExchange:", quoteData);
@@ -444,6 +448,45 @@ const SwapCard = () => {
     } catch (error) {
       console.error("Wallet connection failed:", error);
       setSwapState("idle");
+    }
+  };
+
+  // Reset token approval for the swap router (sets allowance to 0 so next swap will ask for approval again)
+  const handleResetApproval = async () => {
+    if (!user?.wallet?.address || !TOKEN_CONTRACTS[sellToken.symbol]) return;
+    setResetApprovalLoading(true);
+    try {
+      const connectedWallet = wallets.find(
+        (w) => w.address?.toLowerCase() === user.wallet?.address?.toLowerCase()
+      );
+      if (!connectedWallet) throw new Error("Wallet not found");
+      const provider = await connectedWallet.getEthereumProvider();
+      if (!provider) throw new Error("Failed to get wallet provider");
+      const chainId = await provider.request({ method: "eth_chainId" });
+      if (chainId !== ARC_CHAIN_HEX) throw new Error("Switch to Arc Testnet first");
+      const tokenAddress = TOKEN_CONTRACTS[sellToken.symbol];
+      const spender = ARC_POOLS.routerQuantum;
+      const calldata = encodeErc20Approve(spender, "0");
+      const toHexQuantity = (n: number) => "0x" + n.toString(16);
+      await provider.request({
+        method: "eth_sendTransaction",
+        params: [{
+          from: user.wallet.address,
+          to: tokenAddress,
+          value: "0x0",
+          data: calldata,
+          gas: toHexQuantity(80000),
+        }],
+      });
+      fetchUserBalances();
+      alert("Approval reset for " + sellToken.symbol + ". Next swap will ask for approval again.");
+    } catch (e) {
+      console.error("Reset approval failed:", e);
+      setNotification("failed");
+      setRevertReason(e instanceof Error ? e.message : "Reset approval failed");
+      setTimeout(() => { setNotification(null); setRevertReason(null); }, 5000);
+    } finally {
+      setResetApprovalLoading(false);
     }
   };
 
@@ -636,7 +679,7 @@ const SwapCard = () => {
         tokenInAddress,
         tokenOutAddress,
         amountInWei,
-        0.5, // 0.5% slippage
+        slippageTolerance,
         user.wallet.address
       );
 
@@ -649,21 +692,50 @@ const SwapCard = () => {
         approvalAmount: swapData.approvalAmount,
       });
 
-      // Step 4: Handle token approval if needed
-      if (swapData.approvalAddress && swapData.approvalAmount) {
-        console.log("Token approval needed:", {
-          approvalAddress: swapData.approvalAddress,
-          approvalAmount: swapData.approvalAmount,
+      // Step 4: Check current allowance and handle token approval if needed
+      // The spender is the swap router (swapData.to) - this is who needs permission to spend tokens
+      const spenderAddress = swapData.approvalAddress || swapData.to;
+      const requiredAmount = swapData.approvalAmount || amountInWei;
+      
+      console.log("Checking token allowance:", {
+        token: sellToken.symbol,
+        tokenAddress: tokenInAddress,
+        owner: user.wallet.address,
+        spender: spenderAddress,
+        requiredAmount,
+      });
+
+      // Check current allowance
+      const currentAllowance = await fetchERC20Allowance(
+        user.wallet.address,
+        spenderAddress,
+        tokenInAddress
+      );
+
+      const currentAllowanceBigInt = currentAllowance ? BigInt(currentAllowance) : BigInt(0);
+      const requiredAmountBigInt = BigInt(requiredAmount);
+      const needsApproval = currentAllowanceBigInt < requiredAmountBigInt;
+
+      console.log("Allowance check result:", {
+        currentAllowance: currentAllowanceBigInt.toString(),
+        requiredAmount: requiredAmountBigInt.toString(),
+        needsApproval,
+      });
+
+      if (needsApproval) {
+        console.log("Token approval needed - requesting approval:", {
+          approvalAddress: spenderAddress,
+          approvalAmount: requiredAmount,
+          currentAllowance: currentAllowanceBigInt.toString(),
         });
 
         // Send approval transaction via provider
         try {
-          console.log("Sending approval transaction...");
-          // QuantumExchange provides approvalAddress (spender) + approvalAmount (uint256)
-          // We must call token.approve(spender, amount) on the input token contract.
+          console.log("Sending approval transaction to MetaMask...");
+          // Approve the router to spend the required amount
           const approvalCalldata = encodeErc20Approve(
-            swapData.approvalAddress,
-            swapData.approvalAmount
+            spenderAddress,
+            requiredAmount
           );
           const approveTxHash = await sendTransactionViaProvider({
             to: tokenInAddress,
@@ -709,13 +781,16 @@ const SwapCard = () => {
           
           // Additional wait to ensure block is finalized
           await new Promise((resolve) => setTimeout(resolve, 2000));
+          
+          console.log("Approval transaction confirmed successfully!");
         } catch (approvalError: unknown) {
           // Better error serialization for approval errors
           let approvalErrorDetails: Record<string, unknown> = {
             context: "tokenApproval",
             timestamp: new Date().toISOString(),
             token: sellToken.symbol,
-            approvalAddress: swapData.approvalAddress,
+            approvalAddress: spenderAddress,
+            approvalAmount: requiredAmount,
           };
 
           if (approvalError instanceof Error) {
@@ -744,14 +819,27 @@ const SwapCard = () => {
             `Token approval failed: ${approvalErrorDetails.message || "Unknown error"}. Please try again.`
           );
         }
+      } else {
+        console.log("Sufficient allowance already exists - skipping approval");
       }
+
+      // Re-fetch swap data so deadline and amountOutMin are fresh (avoids "execution reverted" from stale data)
+      console.log("Fetching fresh swap data before sending...");
+      const freshSwapData = await getSwapTransactionFromQuantumExchange(
+        tokenInAddress,
+        tokenOutAddress,
+        amountInWei,
+        slippageTolerance,
+        user.wallet.address
+      );
+      const swapDataToSend = freshSwapData;
 
       // Step 5: Send swap transaction via provider
       console.log("Sending swap transaction...");
       console.log("Swap transaction data:", {
-        to: swapData.to,
-        value: swapData.value,
-        dataLength: swapData.data?.length || 0,
+        to: swapDataToSend.to,
+        value: swapDataToSend.value,
+        dataLength: swapDataToSend.data?.length || 0,
       });
 
       // Try to estimate gas, but don't block if it fails
@@ -762,9 +850,9 @@ const SwapCard = () => {
           method: 'eth_estimateGas',
           params: [{
             from: userAddress,
-            to: swapData.to,
-            value: swapData.value,
-            data: swapData.data,
+            to: swapDataToSend.to,
+            value: swapDataToSend.value,
+            data: swapDataToSend.data,
           }],
         });
         console.log("Gas estimate successful:", gasEstimate);
@@ -801,26 +889,26 @@ const SwapCard = () => {
       }
 
       // Ensure value is properly formatted (should be hex string)
-      const swapValue = swapData.value?.startsWith("0x")
-        ? swapData.value
-        : swapData.value
-        ? toHexQuantity(swapData.value)
+      const swapValue = swapDataToSend.value?.startsWith("0x")
+        ? swapDataToSend.value
+        : swapDataToSend.value
+        ? toHexQuantity(swapDataToSend.value)
         : "0x0";
 
       console.log("Final swap transaction parameters:", {
-        to: swapData.to,
+        to: swapDataToSend.to,
         value: swapValue,
-        dataLength: swapData.data?.length,
-        gasLimit: swapData.gasLimit,
+        dataLength: swapDataToSend.data?.length,
+        gasLimit: swapDataToSend.gasLimit,
       });
 
       const txHash = await sendTransactionViaProvider(
         {
-          to: swapData.to,
+          to: swapDataToSend.to,
           value: swapValue,
-          data: swapData.data,
+          data: swapDataToSend.data,
           // Per QuantumExchange docs, use the provided gasLimit when available
-          gas: swapData.gasLimit ?? undefined,
+          gas: swapDataToSend.gasLimit ?? undefined,
         },
         "SWAP"
       );
@@ -856,7 +944,7 @@ const SwapCard = () => {
                 }) as { from?: string; to?: string; value?: string; input?: string } | null;
 
                 if (tx?.from && tx?.to && tx?.input) {
-                  console.log("Failed transaction data:", tx);
+                  console.log("Failed transaction data:", JSON.stringify({ from: tx.from, to: tx.to, value: tx.value, inputLength: tx.input?.length }, null, 2));
                   // Use public RPC for eth_call so we get revert data instead of "Internal JSON-RPC error"
                   decodedReason = await getRevertReasonViaPublicRpc({
                     from: tx.from,
@@ -887,8 +975,8 @@ const SwapCard = () => {
           }
         } catch (receiptError: unknown) {
           const receiptErrorObj = receiptError instanceof Error ? receiptError : new Error(String(receiptError));
-          // Only throw if it's the "Transaction failed on-chain" error
-          if (receiptErrorObj.message.includes("Transaction failed on-chain")) {
+          // Rethrow our "Transaction failed" errors so the outer catch can show the decoded reason
+          if (receiptErrorObj.message.startsWith("Transaction failed")) {
             throw receiptError;
           }
           console.error("Error fetching receipt:", receiptError);
@@ -931,6 +1019,7 @@ const SwapCard = () => {
         sellToken: sellToken.symbol,
         receiveToken: receiveToken.symbol,
         sellAmount,
+        revertReason: revertReason ?? undefined,
       };
 
       if (error instanceof Error) {
@@ -954,12 +1043,26 @@ const SwapCard = () => {
         errorDetails.message = String(error);
       }
 
-      console.error("Swap transaction error - Full details:", errorDetails);
+      // Ensure UI shows decoded revert reason (state may not have updated yet)
+      const msg = errorDetails.message as string | undefined;
+      const decodedFromMessage = msg?.startsWith("Transaction failed: ") ? msg.slice("Transaction failed: ".length) : null;
+      if (decodedFromMessage) {
+        const displayReason =
+          decodedFromMessage.toLowerCase() === "execution reverted"
+            ? "Execution reverted (check allowance, slippage, or liquidity)"
+            : decodedFromMessage;
+        setRevertReason(displayReason);
+        errorDetails.revertReason = decodedFromMessage;
+        if (decodedFromMessage.toLowerCase() === "execution reverted") {
+          errorDetails.hint = "Try: approve the sell token again, or increase slippage in Settings.";
+        }
+      }
+
+      console.error("Swap transaction error - Full details:", JSON.stringify(errorDetails, null, 2));
       
       setSwapState("failed");
       setNotification("failed");
       setTransactionHash(null);
-      // revertReason already set when we decoded on-chain failure
 
       // Auto-dismiss notification after 5 seconds
       setTimeout(() => {
@@ -1065,7 +1168,7 @@ const SwapCard = () => {
           <div className="bg-[#151617] rounded-xl p-4 mb-2">
             <div className="flex items-center justify-between mb-2 ">
               <span className="text-sm text-muted-foreground">Sell</span>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                 <Wallet className="w-4 h-4" />
                 <span>
                   {isLoadingBalances ? "Loading..." : `${formatBalance(getTokenBalance(sellToken.symbol).toString())} ${sellToken.symbol}`}
@@ -1082,6 +1185,16 @@ const SwapCard = () => {
                 >
                   Max
                 </button>
+                {isWalletConnected && TOKEN_CONTRACTS[sellToken.symbol] && (
+                  <button
+                    type="button"
+                    onClick={handleResetApproval}
+                    disabled={resetApprovalLoading}
+                    className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    {resetApprovalLoading ? "Resetting…" : "Reset approval"}
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between">
@@ -1217,6 +1330,8 @@ const SwapCard = () => {
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
+          slippageTolerance={slippageTolerance}
+          onSlippageChange={setSlippageTolerance}
         />
       </motion.div>
 
