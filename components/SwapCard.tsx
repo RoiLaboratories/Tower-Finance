@@ -21,6 +21,8 @@ import {
   getRevertReasonViaPublicRpc,
   TOKEN_CONTRACTS,
   TOKEN_DECIMALS,
+  NATIVE_TOKENS,
+  ERC20_TOKENS,
   ARC_CHAIN_HEX,
   ARC_ADD_NETWORK_PARAMS,
   ARC_POOLS,
@@ -230,6 +232,44 @@ const SwapCard = () => {
         }));
       }
 
+      // Fetch WUSDC balance
+      if (TOKEN_CONTRACTS.WUSDC) {
+        console.log("Fetching WUSDC balance from:", TOKEN_CONTRACTS.WUSDC);
+        const wusdcBalanceWei = await fetchERC20Balance(
+          user.wallet.address,
+          TOKEN_CONTRACTS.WUSDC
+        );
+        console.log("WUSDC balance (wei):", wusdcBalanceWei);
+        if (wusdcBalanceWei && wusdcBalanceWei !== "0x0") {
+          const wusdcBalance =
+            parseInt(wusdcBalanceWei, 16) / 10 ** (TOKEN_DECIMALS.WUSDC || 6);
+          console.log("WUSDC balance (converted):", wusdcBalance);
+          setTokenBalances((prev) => ({
+            ...prev,
+            WUSDC: wusdcBalance,
+          }));
+        }
+      }
+
+      // Fetch QTM balance
+      if (TOKEN_CONTRACTS.QTM) {
+        console.log("Fetching QTM balance from:", TOKEN_CONTRACTS.QTM);
+        const qtmBalanceWei = await fetchERC20Balance(
+          user.wallet.address,
+          TOKEN_CONTRACTS.QTM
+        );
+        console.log("QTM balance (wei):", qtmBalanceWei);
+        if (qtmBalanceWei && qtmBalanceWei !== "0x0") {
+          const qtmBalance =
+            parseInt(qtmBalanceWei, 16) / 10 ** (TOKEN_DECIMALS.QTM || 18);
+          console.log("QTM balance (converted):", qtmBalance);
+          setTokenBalances((prev) => ({
+            ...prev,
+            QTM: qtmBalance,
+          }));
+        }
+      }
+
       // Fetch EURC balance
       if (TOKEN_CONTRACTS.EURC) {
         console.log("Fetching EURC balance from:", TOKEN_CONTRACTS.EURC);
@@ -240,7 +280,7 @@ const SwapCard = () => {
         console.log("EURC balance (wei):", eurcBalanceWei);
         if (eurcBalanceWei && eurcBalanceWei !== "0x0") {
           const eurcBalance =
-            parseInt(eurcBalanceWei, 16) / 10 ** (TOKEN_DECIMALS.EURC || 18);
+            parseInt(eurcBalanceWei, 16) / 10 ** (TOKEN_DECIMALS.EURC || 6);
           console.log("EURC balance (converted):", eurcBalance);
           setTokenBalances((prev) => ({
             ...prev,
@@ -259,7 +299,7 @@ const SwapCard = () => {
         console.log("SWPRC balance (wei):", swprcBalanceWei);
         if (swprcBalanceWei && swprcBalanceWei !== "0x0") {
           const swprcBalance =
-            parseInt(swprcBalanceWei, 16) / 10 ** (TOKEN_DECIMALS.SWPRC || 18);
+            parseInt(swprcBalanceWei, 16) / 10 ** (TOKEN_DECIMALS.SWPRC || 6);
           console.log("SWPRC balance (converted):", swprcBalance);
           setTokenBalances((prev) => ({
             ...prev,
@@ -692,36 +732,77 @@ const SwapCard = () => {
         approvalAmount: swapData.approvalAmount,
       });
 
-      // Step 4: Check current allowance and handle token approval if needed
-      // The spender is the swap router (swapData.to) - this is who needs permission to spend tokens
-      const spenderAddress = swapData.approvalAddress || swapData.to;
-      const requiredAmount = swapData.approvalAmount || amountInWei;
+      // Check for invalid ETH values in token-to-token swaps (will be corrected later)
+      const swapValueBigInt = BigInt(swapData.value || "0");
+      const isNativeInput = NATIVE_TOKENS.includes(sellToken.symbol);
+      const isNativeOutput = NATIVE_TOKENS.includes(receiveToken.symbol);
       
-      console.log("Checking token allowance:", {
-        token: sellToken.symbol,
-        tokenAddress: tokenInAddress,
-        owner: user.wallet.address,
-        spender: spenderAddress,
-        requiredAmount,
-      });
+      // Native tokens (like USDC) are payable and SHOULD have a non-zero ETH value
+      // ERC-20 tokens should NOT have a non-zero ETH value
+      if (!isNativeInput && !isNativeOutput && swapValueBigInt > 0n) {
+        console.warn("WARNING: QuantumExchange returned non-zero ETH value for ERC-20 token swap", {
+          sellToken: sellToken.symbol,
+          receiveToken: receiveToken.symbol,
+          swapValue: swapData.value,
+          swapValueWei: swapValueBigInt.toString(),
+          note: "This will be corrected to 0x0 before sending",
+        });
+      } else if ((isNativeInput || isNativeOutput) && swapValueBigInt > 0n) {
+        console.log("Swap involves native token (requires ETH payment)", {
+          sellToken: sellToken.symbol,
+          receiveToken: receiveToken.symbol,
+          ethAmount: swapData.value,
+          ethInWei: swapValueBigInt.toString(),
+          ethInDecimal: (Number(swapValueBigInt) / 1e18).toFixed(6),
+        });
+      }
 
-      // Check current allowance
-      const currentAllowance = await fetchERC20Allowance(
-        user.wallet.address,
-        spenderAddress,
-        tokenInAddress
-      );
+      // Step 4: Check current allowance and handle token approval if needed
+      // Native tokens (like USDC) don't need ERC-20 approval - they use payable functions
+      // Only ERC-20 tokens need approval
+      const needsApprovalCheck = ERC20_TOKENS.includes(sellToken.symbol);
+      
+      let needsApproval = false;
+      let spenderAddress = "";
+      let requiredAmount = "";
+      let currentAllowanceBigInt = BigInt(0);
+      
+      if (needsApprovalCheck) {
+        // The spender is the swap router (swapData.to) - this is who needs permission to spend tokens
+        spenderAddress = swapData.approvalAddress || swapData.to;
+        requiredAmount = swapData.approvalAmount || amountInWei;
+        
+        console.log("Checking token allowance for ERC-20 token:", {
+          token: sellToken.symbol,
+          tokenAddress: tokenInAddress,
+          owner: user.wallet.address,
+          spender: spenderAddress,
+          requiredAmount,
+        });
 
-      const currentAllowanceBigInt = currentAllowance ? BigInt(currentAllowance) : BigInt(0);
-      const requiredAmountBigInt = BigInt(requiredAmount);
-      const needsApproval = currentAllowanceBigInt < requiredAmountBigInt;
+        // Check current allowance
+        const currentAllowance = await fetchERC20Allowance(
+          user.wallet.address,
+          spenderAddress,
+          tokenInAddress
+        );
 
-      console.log("Allowance check result:", {
-        currentAllowance: currentAllowanceBigInt.toString(),
-        requiredAmount: requiredAmountBigInt.toString(),
-        needsApproval,
-      });
+        currentAllowanceBigInt = currentAllowance ? BigInt(currentAllowance) : BigInt(0);
+        const requiredAmountBigInt = BigInt(requiredAmount);
+        needsApproval = currentAllowanceBigInt < requiredAmountBigInt;
 
+        console.log("Allowance check result:", {
+          currentAllowance: currentAllowanceBigInt.toString(),
+          requiredAmount: requiredAmountBigInt.toString(),
+          needsApproval,
+        });
+      } else {
+        console.log("Native token - skipping ERC-20 approval (uses payable function)", {
+          token: sellToken.symbol,
+        });
+      }
+
+      // Handle approval if needed
       if (needsApproval) {
         console.log("Token approval needed - requesting approval:", {
           approvalAddress: spenderAddress,
@@ -840,6 +921,10 @@ const SwapCard = () => {
         to: swapDataToSend.to,
         value: swapDataToSend.value,
         dataLength: swapDataToSend.data?.length || 0,
+        sellToken: sellToken.symbol,
+        receiveToken: receiveToken.symbol,
+        amountIn: amountInWei,
+        slippage: slippageTolerance,
       });
 
       // Try to estimate gas, but don't block if it fails
@@ -895,9 +980,25 @@ const SwapCard = () => {
         ? toHexQuantity(swapDataToSend.value)
         : "0x0";
 
+      // CRITICAL FIX: Only zero out value for pure ERC-20 token swaps (no native tokens)
+      // Native tokens (like USDC) REQUIRE non-zero ETH value via payable functions
+      // ERC-20 tokens should NEVER have a non-zero value
+      const isNativeInputFinal = NATIVE_TOKENS.includes(sellToken.symbol);
+      const isNativeOutputFinal = NATIVE_TOKENS.includes(receiveToken.symbol);
+      const finalSwapValue = (!isNativeInputFinal && !isNativeOutputFinal) ? "0x0" : swapValue;
+
+      if (finalSwapValue !== swapValue) {
+        console.warn("Corrected swap value to 0x0 for pure ERC-20 token swap", {
+          originalValue: swapValue,
+          correctedValue: finalSwapValue,
+          sellToken: sellToken.symbol,
+          receiveToken: receiveToken.symbol,
+        });
+      }
+
       console.log("Final swap transaction parameters:", {
         to: swapDataToSend.to,
-        value: swapValue,
+        value: finalSwapValue,
         dataLength: swapDataToSend.data?.length,
         gasLimit: swapDataToSend.gasLimit,
       });
@@ -905,7 +1006,7 @@ const SwapCard = () => {
       const txHash = await sendTransactionViaProvider(
         {
           to: swapDataToSend.to,
-          value: swapValue,
+          value: finalSwapValue,
           data: swapDataToSend.data,
           // Per QuantumExchange docs, use the provided gasLimit when available
           gas: swapDataToSend.gasLimit ?? undefined,
@@ -1317,6 +1418,7 @@ const SwapCard = () => {
           selected={sellToken}
           onSelect={setSellToken}
           excludeSymbol={receiveToken.symbol}
+          tokenBalances={tokenBalances}
         />
 
         <TokenModal
@@ -1325,6 +1427,7 @@ const SwapCard = () => {
           selected={receiveToken}
           onSelect={setReceiveToken}
           excludeSymbol={sellToken.symbol}
+          tokenBalances={tokenBalances}
         />
 
         <SettingsModal

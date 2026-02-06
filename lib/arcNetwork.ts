@@ -38,6 +38,8 @@ export const QUANTUM_EXCHANGE_CONFIG = {
 
 // Token Contract Addresses on Arc Testnet
 // Note: Only USDC, WUSDC, QTM are supported by QuantumExchange API
+// IMPORTANT: USDC (0x3600...) is the NATIVE USDC (wrappable via wrapAndSwap, requires ETH payment)
+//            WUSDC (0xD40f...) is the ERC-20 wrapped version (ERC-20 approval required)
 export const TOKEN_CONTRACTS: Record<string, string> = {
   USDC: "0x3600000000000000000000000000000000000000",
   WUSDC: "0xD40fCAa5d2cE963c5dABC2bf59E268489ad7BcE4",
@@ -50,6 +52,13 @@ export const TOKEN_CONTRACTS: Record<string, string> = {
   // HYPE: "0x...",
   // ETH: "0x...",
 };
+
+// Tokens that are "native" and require wrapping (accept ETH via payable functions)
+// These tokens route through RouterQuantum.wrapAndSwap and require sending ETH
+export const NATIVE_TOKENS = ["USDC"];
+
+// Tokens that are regular ERC-20 (require approval)
+export const ERC20_TOKENS = ["WUSDC", "QTM", "EURC", "SWPRC", "USDT", "UNI", "HYPE"];
 
 // Token Decimals Configuration
 // Note: USDC has 18 decimals on Arc Testnet, WUSDC has 6
@@ -1058,6 +1067,22 @@ export async function getSwapTransactionFromQuantumExchange(
       data: result.data.data?.substring(0, 200) + "...",
       fullResponse: result,
     });
+
+    // WORKAROUND: QuantumExchange API sometimes returns non-zero value for token-to-token swaps
+    // This is an API bug - token-to-token swaps should never send ETH
+    // Check if this might be an invalid response
+    const swapValue = result.data.value || "0x0";
+    const swapValueBigInt = BigInt(swapValue.startsWith("0x") ? swapValue : "0x" + swapValue);
+    
+    if (swapValueBigInt > 0n) {
+      console.warn("QuantumExchange returned non-zero value - this may indicate an API issue", {
+        returnedValue: swapValue,
+        valueInWei: swapValueBigInt.toString(),
+        valueInEth: (Number(swapValueBigInt) / 1e18).toFixed(6),
+        tokenIn: tokenInAddress,
+        tokenOut: tokenOutAddress,
+      });
+    }
 
     return {
       to: result.data.to,

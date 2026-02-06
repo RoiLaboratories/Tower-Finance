@@ -1,11 +1,44 @@
-import { useState } from "react";
+"use client";
+
+import { useState, useMemo, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { holdingsData } from "@/mockData/portfolioData";
+import { useWalletHoldings } from "@/lib/useWalletHoldings";
 
-const Positions = () => {
+interface PositionsProps {
+  walletAddress?: string | null;
+  onTotalValueChange?: (value: string) => void;
+}
+
+const Positions = ({ walletAddress, onTotalValueChange }: PositionsProps) => {
   const [holdingsExpanded, setHoldingsExpanded] = useState(false);
+  const { holdings: walletHoldings, loading, error } = useWalletHoldings(
+    walletAddress || null
+  );
+
+  // Use wallet holdings if available and loaded, otherwise use mock data
+  const displayHoldings = useMemo(() => {
+    if (walletAddress && walletHoldings.length > 0) {
+      return walletHoldings;
+    }
+    // Return mock data if no wallet address or no holdings found
+    return holdingsData;
+  }, [walletAddress, walletHoldings]);
+
+  // Calculate and report total value using useEffect (not useMemo)
+  useEffect(() => {
+    const total = displayHoldings.reduce((sum, holding) => {
+      const value = parseFloat(holding.value.replace("$", ""));
+      return sum + value;
+    }, 0);
+    
+    const totalValue = `$${total.toFixed(2)}`;
+    if (onTotalValueChange) {
+      onTotalValueChange(totalValue);
+    }
+  }, [displayHoldings, onTotalValueChange]);
 
   return (
     <motion.div
@@ -26,7 +59,14 @@ const Positions = () => {
         onClick={() => setHoldingsExpanded(!holdingsExpanded)}
         className="w-full flex items-center justify-between p-6"
       >
-        <h3 className="text-xl font-semibold">Holdings</h3>
+        <h3 className="text-xl font-semibold">
+          Holdings
+          {walletAddress && !loading && walletHoldings.length > 0 && (
+            <span className="ml-2 text-sm text-gray-400 font-normal">
+              ({walletHoldings.length} {walletHoldings.length === 1 ? "asset" : "assets"})
+            </span>
+          )}
+        </h3>
         <motion.div
           animate={{ rotate: holdingsExpanded ? 180 : 0 }}
           transition={{ duration: 0.2 }}
@@ -44,7 +84,35 @@ const Positions = () => {
             transition={{ duration: 0.3 }}
             className="overflow-hidden"
           >
-            {holdingsData.length > 0 ? (
+            {loading && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="flex items-center justify-center py-20 px-6"
+              >
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-2 border-gray-600 border-t-primary rounded-full animate-spin" />
+                  <p className="text-gray-400">Loading wallet holdings...</p>
+                </div>
+              </motion.div>
+            )}
+
+            {error && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="flex items-center justify-center py-20 px-6"
+              >
+                <div className="flex flex-col items-center gap-3">
+                  <p className="text-red-400 font-medium">Error loading holdings</p>
+                  <p className="text-gray-400 text-sm">{error}</p>
+                </div>
+              </motion.div>
+            )}
+
+            {!loading && !error && displayHoldings.length > 0 ? (
               <div className="px-6 pb-6">
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -69,7 +137,7 @@ const Positions = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {holdingsData.map((holding, index) => (
+                      {displayHoldings.map((holding, index) => (
                         <motion.tr
                           key={index}
                           initial={{ opacity: 0, x: -20 }}
@@ -89,13 +157,19 @@ const Positions = () => {
                           <td className="py-4 px-4">
                             <div className="flex items-center gap-3">
                               <div className="shrink-0 w-6 h-6">
-                                <Image
-                                  src={holding.icon}
-                                  alt={`${holding.token} logo`}
-                                  width={24}
-                                  height={24}
-                                  className="object-contain w-full h-full"
-                                />
+                                {holding.icon ? (
+                                  <Image
+                                    src={holding.icon}
+                                    alt={`${holding.token} logo`}
+                                    width={24}
+                                    height={24}
+                                    className="object-contain w-full h-full"
+                                  />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center text-xs font-bold">
+                                    {holding.token.charAt(0)}
+                                  </div>
+                                )}
                               </div>
                               <span className="font-medium">
                                 {holding.token}
@@ -117,7 +191,7 @@ const Positions = () => {
                   </table>
                 </div>
               </div>
-            ) : (
+            ) : !loading && !error && displayHoldings.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -140,13 +214,15 @@ const Positions = () => {
                   </svg>
                 </div>
                 <h4 className="text-xl font-semibold mb-2">
-                  No wallet Connected
+                  No Holdings Found
                 </h4>
                 <p className="text-gray-400 text-center">
-                  Connect wallet with holdings to view data.
+                  {walletAddress
+                    ? "This wallet has no holdings to display."
+                    : "Connect a wallet to view your holdings."}
                 </p>
               </motion.div>
-            )}
+            ) : null}
           </motion.div>
         )}
       </AnimatePresence>

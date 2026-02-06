@@ -8,14 +8,18 @@ import eurcLogo from "@/public/assets/EURC_logo.png";
 import hypeLogo from "@/public/assets/hype.png";
 import usdtLogo from "@/public/assets/usdt_logo-removebg-preview.png";
 import uniLogo from "@/public/assets/uniswap-removebg-preview.png";
+import qtmLogo from "@/public/assets/quantum-logo.png";
 
 export const TOKEN_ICONS: Record<string, StaticImageData> = {
   USDC: usdcLogo,
+  WUSDC: usdcLogo,
   ETH: ethLogo,
   EURC: eurcLogo,
   HYPE: hypeLogo,
   USDT: usdtLogo,
   UNI: uniLogo,
+  QTM: qtmLogo,
+  SWPRC: usdcLogo, // Default to USDC logo if SWPRC logo not available
   // Add more token icons as needed
 };
 

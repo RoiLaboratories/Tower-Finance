@@ -32,6 +32,7 @@ interface TokenModalProps {
   selected: (typeof tokens)[0];
   onSelect: (token: (typeof tokens)[0]) => void;
   excludeSymbol?: string;
+  tokenBalances?: Record<string, number>;
 }
 
 const TokenModal = ({
@@ -40,6 +41,7 @@ const TokenModal = ({
   selected,
   onSelect,
   excludeSymbol,
+  tokenBalances = {},
 }: TokenModalProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
@@ -166,12 +168,24 @@ const TokenModal = ({
                           </p>
                         </div>
                       </div>
-                      {isSelected && (
-                        <span className="text-primary text-lg font-bold">✓</span>
-                      )}
-                      {!isSelected && (
-                        <span className="text-muted-foreground/40 text-lg">−</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {tokenBalances?.[token.symbol] !== undefined && (
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-foreground">
+                              {tokenBalances[token.symbol].toFixed(6)}
+                            </p>
+                            <p className="text-xs text-muted-foreground/60">
+                              Balance
+                            </p>
+                          </div>
+                        )}
+                        {isSelected && (
+                          <span className="text-primary text-lg font-bold">✓</span>
+                        )}
+                        {!isSelected && (
+                          <span className="text-muted-foreground/40 text-lg">−</span>
+                        )}
+                      </div>
                     </motion.button>
                   );
                 })}
