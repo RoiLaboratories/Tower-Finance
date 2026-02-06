@@ -1,0 +1,323 @@
+import { supabase } from "./supabase";
+
+export interface RecurringOrder {
+  id: string;
+  wallet_address: string;
+  order_type: "buy" | "sell";
+  source_token: string;
+  target_token: string;
+  amount: number;
+  frequency: string;
+  start_date: string;
+  end_date?: string;
+  next_execution_date?: string;
+  is_active: boolean;
+  execution_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecurringOrderExecution {
+  id: string;
+  recurring_order_id: string;
+  wallet_address: string;
+  execution_date: string;
+  amount: number;
+  source_token: string;
+  target_token: string;
+  transaction_hash?: string;
+  status: "Pending" | "Successful" | "Failed";
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Create a new recurring order
+ */
+export const createRecurringOrder = async (
+  walletAddress: string,
+  orderType: "buy" | "sell",
+  sourceToken: string,
+  targetToken: string,
+  amount: number,
+  frequency: string,
+  endDate?: string
+): Promise<RecurringOrder> => {
+  const { data, error } = await supabase
+    .from("recurring_orders")
+    .insert({
+      wallet_address: walletAddress,
+      order_type: orderType,
+      source_token: sourceToken,
+      target_token: targetToken,
+      amount,
+      frequency,
+      start_date: new Date().toISOString(),
+      end_date: endDate ? new Date(endDate).toISOString() : null,
+      next_execution_date: calculateNextExecutionDate(frequency),
+      is_active: true,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating recurring order:", error);
+    throw error;
+  }
+
+  return data;
+};
+
+/**
+ * Get all recurring orders for a wallet
+ */
+export const getRecurringOrders = async (
+  walletAddress: string,
+  activeOnly = true
+): Promise<RecurringOrder[]> => {
+  let query = supabase
+    .from("recurring_orders")
+    .select("*")
+    .eq("wallet_address", walletAddress);
+
+  if (activeOnly) {
+    query = query.eq("is_active", true);
+  }
+
+  const { data, error } = await query.order("created_at", {
+    ascending: false,
+  });
+
+  if (error) {
+    console.error("Error fetching recurring orders:", error);
+    throw error;
+  }
+
+  return data || [];
+};
+
+/**
+ * Get a specific recurring order
+ */
+export const getRecurringOrder = async (
+  orderId: string
+): Promise<RecurringOrder | null> => {
+  const { data, error } = await supabase
+    .from("recurring_orders")
+    .select("*")
+    .eq("id", orderId)
+    .single();
+
+  if (error) {
+    console.error("Error fetching recurring order:", error);
+    return null;
+  }
+
+  return data;
+};
+
+/**
+ * Update a recurring order
+ */
+export const updateRecurringOrder = async (
+  orderId: string,
+  updates: Partial<RecurringOrder>
+): Promise<RecurringOrder> => {
+  const { data, error } = await supabase
+    .from("recurring_orders")
+    .update(updates)
+    .eq("id", orderId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating recurring order:", error);
+    throw error;
+  }
+
+  return data;
+};
+
+/**
+ * Cancel a recurring order (deactivate it)
+ */
+export const cancelRecurringOrder = async (orderId: string): Promise<void> => {
+  const { error } = await supabase
+    .from("recurring_orders")
+    .update({ is_active: false })
+    .eq("id", orderId);
+
+  if (error) {
+    console.error("Error canceling recurring order:", error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a recurring order
+ */
+export const deleteRecurringOrder = async (orderId: string): Promise<void> => {
+  const { error } = await supabase
+    .from("recurring_orders")
+    .delete()
+    .eq("id", orderId);
+
+  if (error) {
+    console.error("Error deleting recurring order:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get execution history for a recurring order
+ */
+export const getOrderExecutions = async (
+  recurringOrderId: string
+): Promise<RecurringOrderExecution[]> => {
+  const { data, error } = await supabase
+    .from("recurring_order_executions")
+    .select("*")
+    .eq("recurring_order_id", recurringOrderId)
+    .order("execution_date", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching order executions:", error);
+    throw error;
+  }
+
+  return data || [];
+};
+
+/**
+ * Get execution history for a wallet
+ */
+export const getWalletExecutions = async (
+  walletAddress: string
+): Promise<RecurringOrderExecution[]> => {
+  const { data, error } = await supabase
+    .from("recurring_order_executions")
+    .select("*")
+    .eq("wallet_address", walletAddress)
+    .order("execution_date", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching wallet executions:", error);
+    throw error;
+  }
+
+  return data || [];
+};
+
+/**
+ * Log an order execution
+ */
+export const logOrderExecution = async (
+  recurringOrderId: string,
+  walletAddress: string,
+  amount: number,
+  sourceToken: string,
+  targetToken: string,
+  status: "Pending" | "Successful" | "Failed" = "Pending",
+  transactionHash?: string,
+  errorMessage?: string
+): Promise<RecurringOrderExecution> => {
+  const { data, error } = await supabase
+    .from("recurring_order_executions")
+    .insert({
+      recurring_order_id: recurringOrderId,
+      wallet_address: walletAddress,
+      amount,
+      source_token: sourceToken,
+      target_token: targetToken,
+      status,
+      transaction_hash: transactionHash,
+      error_message: errorMessage,
+      execution_date: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error logging order execution:", error);
+    throw error;
+  }
+
+  return data;
+};
+
+/**
+ * Calculate next execution date based on frequency
+ */
+export const calculateNextExecutionDate = (frequency: string): string => {
+  const now = new Date();
+
+  switch (frequency.toLowerCase()) {
+    case "daily":
+      now.setDate(now.getDate() + 1);
+      break;
+    case "weekly":
+      now.setDate(now.getDate() + 7);
+      break;
+    case "bi-weekly":
+      now.setDate(now.getDate() + 14);
+      break;
+    case "monthly":
+      now.setMonth(now.getMonth() + 1);
+      break;
+    default:
+      now.setDate(now.getDate() + 7); // Default to weekly
+  }
+
+  return now.toISOString();
+};
+
+/**
+ * Save recurring order to localStorage as backup
+ */
+export const saveRecurringOrderLocally = (
+  walletAddress: string,
+  orders: RecurringOrder[]
+): void => {
+  try {
+    localStorage.setItem(
+      `tower-recurring-${walletAddress}`,
+      JSON.stringify({
+        walletAddress,
+        orders,
+        savedAt: new Date().toISOString(),
+      })
+    );
+  } catch (error) {
+    console.error("Error saving recurring orders locally:", error);
+  }
+};
+
+/**
+ * Load recurring orders from localStorage
+ */
+export const loadRecurringOrdersLocally = (
+  walletAddress: string
+): { orders: RecurringOrder[]; savedAt: string } | null => {
+  try {
+    const data = localStorage.getItem(`tower-recurring-${walletAddress}`);
+    if (data) {
+      return JSON.parse(data);
+    }
+    return null;
+  } catch (error) {
+    console.error("Error loading recurring orders locally:", error);
+    return null;
+  }
+};
+
+/**
+ * Clear local cache for recurring orders
+ */
+export const clearRecurringOrdersLocalCache = (walletAddress: string): void => {
+  try {
+    localStorage.removeItem(`tower-recurring-${walletAddress}`);
+  } catch (error) {
+    console.error("Error clearing recurring orders cache:", error);
+  }
+};

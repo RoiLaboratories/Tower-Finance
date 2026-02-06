@@ -1,22 +1,75 @@
 "use client";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePrivy } from "@privy-io/react-auth";
 import { tokens } from "@/mockData/token";
 import { TokenDropdown } from "./TokenDropdown";
 import { FrequencyField } from "./FrequencyField";
 import { AmountInput } from "./AmountInput";
 import { FrequencyModal } from "../FrequencyModal";
 import { DatePicker } from "../DatePicker";
+import { createRecurringOrder } from "@/lib/recurringOrderService";
 
 export const RecurringSell = () => {
-  const [selectedSellToken, setSelectedSellToken] = useState(null);
+  const { user } = usePrivy();
+  const walletAddress = user?.wallet?.address;
+
+  const [selectedSellToken, setSelectedSellToken] = useState<typeof tokens[0] | null>(null);
   const [selectedConvertToken, setSelectedConvertToken] = useState(tokens[0]);
-  const [amount] = useState("10.00");
+  const [amount, setAmount] = useState("10.00");
   const [frequency, setFrequency] = useState("Weekly");
   const [endDate, setEndDate] = useState("01/22/2026");
 
   const [showFrequencyModal, setShowFrequencyModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleContinue = async () => {
+    if (!walletAddress) {
+      setError("Please connect your wallet");
+      return;
+    }
+
+    if (!selectedSellToken) {
+      setError("Please select a token to sell");
+      return;
+    }
+
+    if (!amount || parseFloat(amount) <= 0) {
+      setError("Please enter a valid amount");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await createRecurringOrder(
+        walletAddress,
+        "sell",
+        selectedSellToken.symbol,
+        selectedConvertToken.symbol,
+        parseFloat(amount),
+        frequency,
+        endDate
+      );
+
+      // Reset form
+      setSelectedSellToken(null);
+      setAmount("10.00");
+      setFrequency("Weekly");
+      setEndDate("01/22/2026");
+
+      // Show success (you can add a toast notification here)
+      console.log("Recurring sell order created successfully");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create recurring sell order");
+      console.error("Error creating recurring sell:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <>
@@ -25,9 +78,9 @@ export const RecurringSell = () => {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.3 }}
-        className="bg-zinc-900 rounded-xl sm:rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-6"
+        className="bg-zinc-900/50 backdrop-blur-sm rounded-2xl p-6 space-y-5 border border-zinc-800/30"
       >
-        <AmountInput amount={amount} readOnly />
+        <AmountInput amount={amount} onChange={setAmount} />
 
         <TokenDropdown
           label="Sell"
@@ -59,12 +112,24 @@ export const RecurringSell = () => {
           />
         </div>
 
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg"
+          >
+            <p className="text-red-400 text-sm">{error}</p>
+          </motion.div>
+        )}
+
         <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="w-full py-3 rounded-xl bg-white text-black font-semibold hover:bg-gray-100 transition-colors text-sm sm:text-base"
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          onClick={handleContinue}
+          disabled={isLoading}
+          className="w-full py-3 rounded-xl bg-white text-black font-semibold hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm mt-2"
         >
-          Continue
+          {isLoading ? "Creating Order..." : "Continue"}
         </motion.button>
       </motion.div>
 

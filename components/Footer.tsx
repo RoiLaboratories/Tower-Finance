@@ -14,15 +14,15 @@ const Footer = () => {
   const socialLinks = [
     {
       icon: <FaXTwitter className="w-5 h-5" />,
-      href: "https://x.com/",
+      href: "https://x.com/TowerExchange",
     },
     {
       icon: <FaTelegram className="w-5 h-5" />,
-      href: "https://web.telegram.org/",
+      href: "https://t.me/TowerExchangeCommunity",
     },
     {
       icon: <FaDiscord className="w-5 h-5" />,
-      href: "https://discord.com/",
+      href: "https://discord.gg/84d3wauUu",
     },
   ];
 
@@ -54,6 +54,8 @@ const Footer = () => {
             <motion.a
               key={index}
               href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-muted-foreground hover:text-foreground transition-colors"
               whileHover={{ scale: 1.2, y: -2 }}
               whileTap={{ scale: 0.9 }}

@@ -1,6 +1,6 @@
-# Supabase Setup for Tower Exchange Activities
+# Supabase Setup for Tower Exchange
 
-This guide will help you set up Supabase to store and fetch user activity data.
+This guide will help you set up Supabase to store activities and AI chat conversations.
 
 ## Prerequisites
 
@@ -16,8 +16,12 @@ This guide will help you set up Supabase to store and fetch user activity data.
 3. Copy the contents of `schema.sql` in this folder
 4. Paste and run the SQL in the SQL Editor
 5. This will create:
-   - The `activities` table
+   - The `activities` table (for trading activities)
+   - The `ai_chat_sessions` table (for chat conversations)
+   - The `ai_chat_messages` table (for individual chat messages)
    - Indexes for performance
+   - Row Level Security policies
+   - Automatic timestamp triggers
    - Row Level Security (RLS) policies
    - Automatic timestamp triggers
 
@@ -91,7 +95,9 @@ INSERT INTO activities (
 
 ## Schema Overview
 
-The `activities` table stores:
+### Activities Table
+
+The `activities` table stores trading activities:
 
 - **wallet_address**: User's wallet address (from Privy)
 - **type**: Activity type (Swap, Deposit, Withdraw, Transfer)
@@ -105,6 +111,58 @@ The `activities` table stores:
 - **transaction_hash**: Blockchain transaction hash
 - **fee**: Transaction fee
 - **fee_currency_ticker**: Fee currency
+
+### AI Chat Tables
+
+The schema includes two tables for AI chat functionality:
+
+#### `ai_chat_sessions`
+Stores conversation sessions:
+- **id**: Unique session identifier
+- **wallet_address**: User's wallet address
+- **title**: Session title
+- **is_active**: Whether session is ongoing
+- **message_count**: Number of messages
+- **last_message_at**: Timestamp of last message
+
+#### `ai_chat_messages`
+Stores individual messages:
+- **id**: Unique message identifier
+- **wallet_address**: User's wallet address
+- **session_id**: Reference to the session
+- **message_text**: Message content
+- **is_user_message**: true for user, false for AI
+- **message_type**: Type (text, chart, analysis)
+
+## Using the Chat Service
+
+The `lib/chatService.ts` file provides functions to interact with chat data:
+
+```typescript
+import {
+  createChatSession,
+  addChatMessage,
+  getChatMessages,
+  getChatSessions,
+  closeChatSession,
+} from "@/lib/chatService";
+
+// Create a new session
+const session = await createChatSession(walletAddress, "My Chat");
+
+// Add messages
+await addChatMessage(walletAddress, sessionId, "Hello!", true, "text");
+await addChatMessage(walletAddress, sessionId, "Hi there!", false, "text");
+
+// Get messages
+const messages = await getChatMessages(sessionId);
+
+// Get all sessions
+const sessions = await getChatSessions(walletAddress);
+
+// Close session
+await closeChatSession(sessionId);
+```
 
 ## Security Notes
 
