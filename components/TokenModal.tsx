@@ -12,6 +12,7 @@ import uniLogo from "@/public/assets/uniswap-removebg-preview.png";
 import hypeLogo from "@/public/assets/hype.png";
 import eurcLogo from "@/public/assets/Euro_Coin logo.png";
 import swprcLogo from "@/public/assets/swapr_logo.png";
+import syntharaLogo from "@/public/assets/synthra logo.png";
 import quantumLogo from "@/public/assets/quantum-logo.png";
 
 const tokens = [
@@ -19,6 +20,7 @@ const tokens = [
   { symbol: "ETH", icon: ethLogo, name: "Ethereum", balance: 2.5 },
   { symbol: "USDT", icon: usdtLogo, name: "Tether", balance: 500 },
   { symbol: "EURC", icon: eurcLogo, name: "Euro Coin", balance: 750 },
+  { symbol: "SYN", icon: syntharaLogo, name: "Synthra", balance: 100 },
   { symbol: "SWPRC", icon: swprcLogo, name: "Swaparc Token", balance: 300 },
   { symbol: "UNI", icon: uniLogo, name: "Uniswap", balance: 50 },
   { symbol: "HYPE", icon: hypeLogo, name: "Hyperliquid", balance: 100 },
