@@ -1,8 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { ArrowUp } from "lucide-react";
+import { usePrivy } from "@privy-io/react-auth";
+import { sendMessageToAIAgent, createAIAgentSession } from "@/lib/aiAgentService";
+import { v4 as uuidv4 } from "uuid";
 
 const quickPrompts = [
   "What are my buy/sell position",
@@ -15,28 +18,55 @@ interface Message {
   text: string;
   isUser: boolean;
   isTyping?: boolean;
+  error?: string;
 }
 
-// Mock responses based on prompt type
-const getMockResponse = (prompt: string): string => {
-  if (prompt.includes("buy/sell position")) {
-    return "You currently hold $1000 USDC and short $500 worth of ETH.";
-  } else if (prompt.includes("7D trading volume")) {
-    return "Trading Volume";
-  } else if (prompt.includes("overall analysis")) {
-    return "With bitcoin below $90K, the crypto market in a downtrend but a bounce back should be expected soon based on market analysis";
-  }
-  return "I'm here to help with your trading needs!";
-};
-
 export const AIChat = () => {
+  const { user } = usePrivy();
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+
+  // Initialize session when user is available
+  useEffect(() => {
+    const initializeSession = async () => {
+      if (!user?.wallet?.address) return;
+
+      try {
+        // Try to create a session or use a stored one
+        const storedSessionId = localStorage.getItem("ai-session-id");
+        if (storedSessionId) {
+          setSessionId(storedSessionId);
+        } else {
+          const response = await createAIAgentSession(user.wallet.address);
+          setSessionId(response.sessionId);
+          localStorage.setItem("ai-session-id", response.sessionId);
+        }
+      } catch (err) {
+        console.error("Failed to initialize session:", err);
+        // Fallback to generating a local session ID
+        const localSessionId = uuidv4();
+        setSessionId(localSessionId);
+        localStorage.setItem("ai-session-id", localSessionId);
+      }
+    };
+
+    initializeSession();
+  }, [user?.wallet?.address]);
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
+    if (!user?.wallet?.address) {
+      setError("Please connect your wallet first");
+      return;
+    }
+    if (!sessionId) {
+      setError("Chat session not initialized");
+      return;
+    }
 
     const userMessage: Message = {
       id: Date.now(),
@@ -47,17 +77,36 @@ export const AIChat = () => {
     setMessages((prev) => [...prev, userMessage]);
     setMessage("");
     setIsLoading(true);
+    setError(null);
 
-    // Simulate AI response delay
-    setTimeout(() => {
+    try {
+      const response = await sendMessageToAIAgent({
+        message: text,
+        userid: user.wallet.address,
+        session_id: sessionId,
+      });
+
       const aiResponse: Message = {
         id: Date.now() + 1,
-        text: getMockResponse(text),
+        text: response.reply,
         isUser: false,
       };
       setMessages((prev) => [...prev, aiResponse]);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to get response";
+      setError(errorMessage);
+
+      const errorMsg: Message = {
+        id: Date.now() + 1,
+        text: "Sorry, I encountered an error. Please try again.",
+        isUser: false,
+        error: errorMessage,
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handlePromptClick = (prompt: string) => {
@@ -70,6 +119,7 @@ export const AIChat = () => {
     setActivePrompt(null);
     setMessages([]);
     setIsLoading(false);
+    setError(null);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -82,6 +132,18 @@ export const AIChat = () => {
 
   return (
     <div className="flex-1 flex flex-col p-4 sm:p-6 lg:p-12 w-full">
+      {/* Error notification */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 text-sm"
+        >
+          {error}
+        </motion.div>
+      )}
+
       {/* Messages Area - Takes up remaining space */}
       <div className="flex-1 overflow-y-auto space-y-4 flex flex-col justify-end">
         {messages.length > 0 && (
